@@ -6,7 +6,7 @@ const match = html.match(/<script id="simppt-parser">([\s\S]*?)<\/script>/)
 assert.ok(match, 'index.html must contain <script id="simppt-parser">')
 
 const SimpptParser = new Function(`${match[1]}; return SimpptParser;`)()
-const { parse, renderMarkdown, slideIndexAt, slideLineRange, IMG_RE } = SimpptParser
+const { parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE } = SimpptParser
 
 const tests = []
 const test = (name, fn) => tests.push({ name, fn })
@@ -161,6 +161,31 @@ test('slideLineRange returns raw line span of a slide', () => {
   assert.deepEqual(slideLineRange(text, 0), { start: 3, end: 5 })
   assert.deepEqual(slideLineRange(text, 1), { start: 6, end: 7 })
   assert.equal(slideLineRange(text, 2), null)
+})
+
+test('heading with {x= y= s=} renders absolutely positioned + scaled', () => {
+  const out = renderMarkdown('# T {x=5 y=6 s=120}')
+  assert.equal(out, '<h1 class="txt-abs" style="left:5%;top:6%;transform:scale(1.2)">T</h1>')
+})
+
+test('paragraph with {x= y=} without s has no transform', () => {
+  const out = renderMarkdown('hello world {x=10 y=50}')
+  assert.equal(out, '<p class="txt-abs" style="left:10%;top:50%">hello world</p>')
+})
+
+test('list with attrs on first item positions the whole list', () => {
+  const out = renderMarkdown('- one {x=8 y=9}\n- two')
+  assert.equal(out, '<ul class="txt-abs" style="left:8%;top:9%"><li>one</li><li>two</li></ul>')
+})
+
+test('blocksOf reports type and start line of each block', () => {
+  const blocks = blocksOf('# title\n\npara line\nmore\n\n- a\n- b\n\n![i](x.png)')
+  assert.deepEqual(blocks.map((b) => [b.type, b.start]), [['h', 0], ['p', 2], ['ul', 5], ['img', 8]])
+})
+
+test('stripAttrTail splits trailing attr braces from a line', () => {
+  assert.deepEqual(stripAttrTail('# T {x=1 y=2}'), { text: '# T', attrs: { x: '1', y: '2' } })
+  assert.deepEqual(stripAttrTail('plain line'), { text: 'plain line', attrs: null })
 })
 
 let failed = 0

@@ -55,19 +55,19 @@
     align-items: center; justify-content: center;
     gap: 2.5vh; text-align: center; overflow: hidden;
   }
-  .deck-slide h1 { font-size: 5.5vw; font-weight: 700; line-height: 1.25; }
-  .deck-slide h2 { font-size: 4vw; font-weight: 700; line-height: 1.3; }
-  .deck-slide h3 { font-size: 3vw; font-weight: 600; line-height: 1.35; }
-  .deck-slide p { font-size: 2.6vw; line-height: 1.65; }
-  .deck-slide ul, .deck-slide ol {
+  .slide-scope h1 { font-size: 5.5vw; font-weight: 700; line-height: 1.25; }
+  .slide-scope h2 { font-size: 4vw; font-weight: 700; line-height: 1.3; }
+  .slide-scope h3 { font-size: 3vw; font-weight: 600; line-height: 1.35; }
+  .slide-scope p { font-size: 2.6vw; line-height: 1.65; }
+  .slide-scope ul, .slide-scope ol {
     font-size: 2.6vw; line-height: 1.8; text-align: left; padding-left: 1.3em;
   }
-  .deck-slide code {
+  .slide-scope code {
     background: rgba(128, 128, 128, 0.25);
     padding: 0.1em 0.35em; border-radius: 0.2em; font-size: 0.9em;
   }
-  .deck-slide a { color: inherit; text-decoration: underline; }
-  .deck-slide strong { color: var(--accent, inherit); }
+  .slide-scope a { color: inherit; text-decoration: underline; }
+  .slide-scope strong { color: var(--accent, inherit); }
   .deck-slide.layout-top {
     width: 84vw; height: 49.5vw; max-height: none;
     align-items: flex-start; justify-content: flex-start;
@@ -95,11 +95,16 @@
   }
   .deck-slide.layout-split .split-text h2 { font-size: 2.8vw; }
   .deck-slide.layout-split p { font-size: 2.1vw; line-height: 1.7; }
-  .deck-slide figure { margin: 0; }
-  .deck-slide img {
+  .slide-scope figure { margin: 0; }
+  .slide-scope img {
     display: block; max-width: 80vw; max-height: 68vh; border-radius: 0.5vw;
   }
 
+  .txt-abs {
+    position: absolute; margin: 0;
+    transform-origin: top left; max-width: 90%;
+    text-align: left;
+  }
   .img-abs { position: absolute; margin: 0; }
   .img-abs img {
     width: 100%; height: auto; max-width: none; max-height: none;
@@ -107,16 +112,16 @@
   }
   #stage-overlay { position: absolute; inset: 0; pointer-events: none; }
   #ed-overlay { position: absolute; inset: 0; }
-  #ed-frame img { -webkit-user-drag: none; user-select: none; }
-  #ed-frame figure { cursor: move; }
-  #ed-overlay .img-abs:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); }
+  #ed-frame img { -webkit-user-drag: none; }
+  #ed-frame .slide-scope > *, #ed-frame #ed-overlay > * { cursor: move; user-select: none; }
+  #ed-overlay > *:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); }
   .img-handle {
-    position: absolute; right: -0.7vw; bottom: -0.7vw;
+    position: absolute; right: -0.8vw; bottom: -0.8vw;
     width: 1.6vw; height: 1.6vw;
     background: #6c9ef8; border-radius: 0.3vw;
     cursor: nwse-resize; opacity: 0;
   }
-  #ed-overlay .img-abs:hover .img-handle { opacity: 1; }
+  #ed-overlay > *:hover .img-handle { opacity: 1; }
 
   #editor {
     position: fixed; inset: 0;
@@ -202,8 +207,8 @@
 </main>
 
 <section id="stage" hidden>
-  <div id="slide-content" class="deck-slide"></div>
-  <div id="stage-overlay"></div>
+  <div id="slide-content" class="deck-slide slide-scope"></div>
+  <div id="stage-overlay" class="slide-scope"></div>
   <div id="indicator" hidden></div>
   <button id="exit-play" title="回編輯（Esc）">✕</button>
 </section>
@@ -212,6 +217,7 @@
   <div id="editor-bar">
     <button id="ed-play">▶ 播放</button>
     <button id="ed-save">儲存 .md</button>
+    <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
     <button id="ed-home">首頁</button>
     <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
   </div>
@@ -219,7 +225,7 @@
     <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
     <div id="ed-preview">
       <div id="ed-viewport">
-        <div id="ed-frame"><div id="ed-content" class="deck-slide"></div><div id="ed-overlay"></div></div>
+        <div id="ed-frame"><div id="ed-content" class="deck-slide slide-scope"></div><div id="ed-overlay" class="slide-scope"></div></div>
       </div>
       <div id="ed-pageinfo"></div>
     </div>
@@ -376,69 +382,100 @@ const SimpptParser = (() => {
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
 
-  const renderMarkdown = (body, resolveSrc = (src) => src) => {
-    const lines = body.replace(/\r\n?/g, '\n').split('\n')
-    const blocks = []
-    let list = null
-    let para = []
-    const flushPara = () => {
-      if (para.length > 0) blocks.push(`<p>${inline(escapeHtml(para.join(' ')))}</p>`)
-      para = []
-    }
-    const flushList = () => {
-      if (list) blocks.push(`<${list.tag}>${list.items.map((i) => `<li>${i}</li>`).join('')}</${list.tag}>`)
-      list = null
-    }
-    for (const raw of lines) {
-      const line = raw.trim()
-      if (line === '') { flushPara(); flushList(); continue }
-      const img = line.match(IMG_RE)
-      if (img) {
-        flushPara(); flushList()
-        const attrs = img[3] ? parseDirectives(img[3]) : {}
-        const x = parseFloat(attrs.x)
-        const y = parseFloat(attrs.y)
-        const w = parseFloat(attrs.w)
-        const tag = `<img src="${escapeHtml(resolveSrc(img[2]))}" alt="${escapeHtml(img[1])}">`
-        if (Number.isFinite(x) && Number.isFinite(y)) {
-          const width = Number.isFinite(w) ? w : 30
-          blocks.push(`<figure class="img-abs" style="left:${x}%;top:${y}%;width:${width}%">${tag}</figure>`)
-        } else {
-          blocks.push(`<figure>${tag}</figure>`)
-        }
-        continue
-      }
-      const h = line.match(/^(#{1,3})\s+(.*)$/)
-      if (h) {
-        flushPara(); flushList()
-        blocks.push(`<h${h[1].length}>${inline(escapeHtml(h[2]))}</h${h[1].length}>`)
-        continue
-      }
-      const ul = line.match(/^[-*]\s+(.*)$/)
-      if (ul) {
-        flushPara()
-        if (list && list.tag !== 'ul') flushList()
-        list = list || { tag: 'ul', items: [] }
-        list.items.push(inline(escapeHtml(ul[1])))
-        continue
-      }
-      const ol = line.match(/^\d+\.\s+(.*)$/)
-      if (ol) {
-        flushPara()
-        if (list && list.tag !== 'ol') flushList()
-        list = list || { tag: 'ol', items: [] }
-        list.items.push(inline(escapeHtml(ol[1])))
-        continue
-      }
-      flushList()
-      para.push(line)
-    }
-    flushPara()
-    flushList()
-    return blocks.join('')
+  const ATTR_TAIL_RE = /\s*\{([A-Za-z_][\w-]*=[^}]*)\}\s*$/
+
+  const stripAttrTail = (line) => {
+    const m = line.match(ATTR_TAIL_RE)
+    return m
+      ? { text: line.slice(0, m.index), attrs: parseDirectives(m[1]) }
+      : { text: line, attrs: null }
   }
 
-  return { parse, renderMarkdown, slideIndexAt, slideLineRange, IMG_RE }
+  const blocksOf = (body) => {
+    const lines = body.replace(/\r\n?/g, '\n').split('\n')
+    const blocks = []
+    let cur = null
+    const flush = () => {
+      if (cur) blocks.push(cur)
+      cur = null
+    }
+    for (let i = 0; i < lines.length; i += 1) {
+      const raw = lines[i].trim()
+      if (raw === '') { flush(); continue }
+      const img = raw.match(IMG_RE)
+      if (img) {
+        flush()
+        blocks.push({
+          type: 'img', alt: img[1], src: img[2],
+          attrs: img[3] ? parseDirectives(img[3]) : null, start: i,
+        })
+        continue
+      }
+      const h = raw.match(/^(#{1,3})\s+(.*)$/)
+      if (h) {
+        flush()
+        const s = stripAttrTail(h[2])
+        blocks.push({ type: 'h', level: h[1].length, text: s.text, attrs: s.attrs, start: i })
+        continue
+      }
+      const ul = raw.match(/^[-*]\s+(.*)$/)
+      if (ul) {
+        if (cur && cur.type === 'ul') { cur.items.push(ul[1]); continue }
+        flush()
+        const s = stripAttrTail(ul[1])
+        cur = { type: 'ul', items: [s.text], attrs: s.attrs, start: i }
+        continue
+      }
+      const ol = raw.match(/^\d+\.\s+(.*)$/)
+      if (ol) {
+        if (cur && cur.type === 'ol') { cur.items.push(ol[1]); continue }
+        flush()
+        const s = stripAttrTail(ol[1])
+        cur = { type: 'ol', items: [s.text], attrs: s.attrs, start: i }
+        continue
+      }
+      if (cur && cur.type === 'p') { cur.lines.push(raw); continue }
+      flush()
+      const s = stripAttrTail(raw)
+      cur = { type: 'p', lines: [s.text], attrs: s.attrs, start: i }
+    }
+    flush()
+    return blocks
+  }
+
+  const textAbsAttr = (attrs) => {
+    if (!attrs) return ''
+    const x = parseFloat(attrs.x)
+    const y = parseFloat(attrs.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return ''
+    const s = parseFloat(attrs.s)
+    const scale = Number.isFinite(s) && s !== 100
+      ? `;transform:scale(${parseFloat((s / 100).toFixed(3))})`
+      : ''
+    return ` class="txt-abs" style="left:${x}%;top:${y}%${scale}"`
+  }
+
+  const renderMarkdown = (body, resolveSrc = (src) => src) => blocksOf(body).map((b) => {
+    if (b.type === 'img') {
+      const x = parseFloat(b.attrs && b.attrs.x)
+      const y = parseFloat(b.attrs && b.attrs.y)
+      const w = parseFloat(b.attrs && b.attrs.w)
+      const tag = `<img src="${escapeHtml(resolveSrc(b.src))}" alt="${escapeHtml(b.alt)}">`
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        const width = Number.isFinite(w) ? w : 30
+        return `<figure class="img-abs" style="left:${x}%;top:${y}%;width:${width}%">${tag}</figure>`
+      }
+      return `<figure>${tag}</figure>`
+    }
+    const abs = textAbsAttr(b.attrs)
+    if (b.type === 'h') return `<h${b.level}${abs}>${inline(escapeHtml(b.text))}</h${b.level}>`
+    if (b.type === 'ul' || b.type === 'ol') {
+      return `<${b.type}${abs}>${b.items.map((i) => `<li>${inline(escapeHtml(i))}</li>`).join('')}</${b.type}>`
+    }
+    return `<p${abs}>${inline(escapeHtml(b.lines.join(' ')))}</p>`
+  }).join('')
+
+  return { parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE }
 })()
 </script>
 
@@ -528,7 +565,7 @@ const SimpptParser = (() => {
   const LAYOUTS = ['top', 'split']
 
   const applyLayout = (container, layout) => {
-    container.className = `deck-slide${LAYOUTS.includes(layout) ? ` layout-${layout}` : ''}`
+    container.className = `deck-slide slide-scope${LAYOUTS.includes(layout) ? ` layout-${layout}` : ''}`
     if (layout !== 'split') return
     const fig = container.querySelector('figure')
     if (!fig) return
@@ -554,7 +591,7 @@ const SimpptParser = (() => {
     stage.style.setProperty('--accent', meta.accent || 'inherit')
     content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
     stageOverlay.innerHTML = ''
-    for (const fig of [...content.querySelectorAll('figure.img-abs')]) stageOverlay.appendChild(fig)
+    for (const el of [...content.querySelectorAll('.img-abs, .txt-abs')]) stageOverlay.appendChild(el)
     applyLayout(content, meta.layout)
     indicator.textContent = `${state.index + 1} / ${state.deck.slides.length}`
   }
@@ -799,7 +836,7 @@ const SimpptParser = (() => {
     edFrame.style.transform = `scale(${scale})`
   }
 
-  let previewFigures = []
+  let previewBlocks = []
   let previewIdx = 0
 
   const attachHandle = (fig) => {
@@ -822,11 +859,11 @@ const SimpptParser = (() => {
     edFrame.style.color = meta.color || DEFAULT_COLOR
     edFrame.style.setProperty('--accent', meta.accent || 'inherit')
     edContent.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
-    previewFigures = [...edContent.querySelectorAll('figure')]
+    previewBlocks = [...edContent.children]
     edOverlay.innerHTML = ''
-    for (const fig of previewFigures.filter((f) => f.classList.contains('img-abs'))) {
-      edOverlay.appendChild(fig)
-      attachHandle(fig)
+    for (const el of previewBlocks.filter((b) => b.classList.contains('img-abs') || b.classList.contains('txt-abs'))) {
+      edOverlay.appendChild(el)
+      attachHandle(el)
     }
     applyLayout(edContent, meta.layout)
     edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
@@ -919,25 +956,21 @@ const SimpptParser = (() => {
     }
   }
 
-  // --- 預覽區拖曳圖片：拖=移動、右下把手=縮放、雙擊=還原自動排版 ---
+  // --- 預覽區直接編排：拖=移動、右下把手=縮放、雙擊=還原該塊、還原版面=清整頁 ---
 
-  const writeImageAttrs = (k, attrs) => {
+  const currentSlideLines = () => {
     const range = SimpptParser.slideLineRange(edText.value, previewIdx)
-    if (!range) return
+    if (!range) return null
     const lines = edText.value.split('\n')
-    const imgLineIdxs = []
-    for (let j = range.start; j < range.end; j += 1) {
-      if (SimpptParser.IMG_RE.test(lines[j].trim())) imgLineIdxs.push(j)
-    }
-    const li = imgLineIdxs[k]
-    if (li === undefined) return
-    const m = lines[li].trim().match(SimpptParser.IMG_RE)
-    const base = `![${m[1]}](${m[2]})`
-    const next = attrs ? `${base}{x=${attrs.x} y=${attrs.y} w=${attrs.w}}` : base
-    if (lines[li] === next) return
+    let lead = range.start
+    while (lead < range.end && lines[lead].trim() === '') lead += 1
+    return { lines, range, lead }
+  }
+
+  const setEditorText = (lines) => {
     const selStart = edText.selectionStart
     const selEnd = edText.selectionEnd
-    edText.value = [...lines.slice(0, li), next, ...lines.slice(li + 1)].join('\n')
+    edText.value = lines.join('\n')
     edText.setSelectionRange(selStart, selEnd)
     edDirty = true
     setStatus('未儲存變更')
@@ -945,43 +978,84 @@ const SimpptParser = (() => {
     scheduleSave()
   }
 
+  const rewriteBlockLine = (line, attrs) => {
+    const trimmed = line.trim()
+    const img = trimmed.match(SimpptParser.IMG_RE)
+    if (img) {
+      const base = `![${img[1]}](${img[2]})`
+      return attrs ? `${base}{x=${attrs.x} y=${attrs.y} w=${attrs.w}}` : base
+    }
+    const base = SimpptParser.stripAttrTail(line).text.trimEnd()
+    return attrs ? `${base} {x=${attrs.x} y=${attrs.y} s=${attrs.s}}` : base
+  }
+
+  const writeBlockAttrs = (k, attrs) => {
+    const ctx = currentSlideLines()
+    if (!ctx) return
+    const body = ctx.lines.slice(ctx.range.start, ctx.range.end).join('\n').trim()
+    const block = SimpptParser.blocksOf(body)[k]
+    if (!block) return
+    const li = ctx.lead + block.start
+    const next = rewriteBlockLine(ctx.lines[li], attrs)
+    if (ctx.lines[li] === next) return
+    setEditorText([...ctx.lines.slice(0, li), next, ...ctx.lines.slice(li + 1)])
+  }
+
+  const resetSlideLayout = () => {
+    const ctx = currentSlideLines()
+    if (!ctx) return
+    let changed = false
+    const nextLines = ctx.lines.map((line, j) => {
+      if (j < ctx.range.start || j >= ctx.range.end || line.trim() === '') return line
+      const next = rewriteBlockLine(line, null)
+      if (next !== line) changed = true
+      return next
+    })
+    if (changed) setEditorText(nextLines)
+  }
+
   let dragCtx = null
 
-  const startImgDrag = (e, fig, mode) => {
-    const k = previewFigures.indexOf(fig)
+  const startBlockDrag = (e, el, mode) => {
+    const k = previewBlocks.indexOf(el)
     if (k < 0) return
     e.preventDefault()
     const frameRect = edFrame.getBoundingClientRect()
-    if (!fig.classList.contains('img-abs')) {
-      const rect = fig.querySelector('img').getBoundingClientRect()
-      fig.classList.add('img-abs')
-      fig.style.left = `${(((rect.left - frameRect.left) / frameRect.width) * 100).toFixed(1)}%`
-      fig.style.top = `${(((rect.top - frameRect.top) / frameRect.height) * 100).toFixed(1)}%`
-      fig.style.width = `${((rect.width / frameRect.width) * 100).toFixed(1)}%`
-      edOverlay.appendChild(fig)
-      attachHandle(fig)
+    const isImg = el.tagName === 'FIGURE'
+    if (!el.classList.contains('img-abs') && !el.classList.contains('txt-abs')) {
+      const rect = (isImg ? el.querySelector('img') : el).getBoundingClientRect()
+      el.classList.add(isImg ? 'img-abs' : 'txt-abs')
+      el.style.left = `${(((rect.left - frameRect.left) / frameRect.width) * 100).toFixed(1)}%`
+      el.style.top = `${(((rect.top - frameRect.top) / frameRect.height) * 100).toFixed(1)}%`
+      if (isImg) el.style.width = `${((rect.width / frameRect.width) * 100).toFixed(1)}%`
+      edOverlay.appendChild(el)
+      attachHandle(el)
     }
+    const scaleMatch = (el.style.transform || '').match(/scale\(([\d.]+)\)/)
     dragCtx = {
-      fig, k, mode, frameRect,
+      el, k, mode, frameRect, isImg,
       startX: e.clientX,
       startY: e.clientY,
-      x: parseFloat(fig.style.left),
-      y: parseFloat(fig.style.top),
-      w: parseFloat(fig.style.width),
+      x: parseFloat(el.style.left),
+      y: parseFloat(el.style.top),
+      w: isImg ? parseFloat(el.style.width) : 0,
+      s: scaleMatch ? parseFloat(scaleMatch[1]) * 100 : 100,
     }
   }
 
+  const BLOCK_SELECTOR = 'figure, h1, h2, h3, p, ul, ol'
+
   edFrame.addEventListener('mousedown', (e) => {
-    const fig = e.target.closest('figure')
-    if (!fig) return
-    startImgDrag(e, fig, e.target.closest('.img-handle') ? 'resize' : 'move')
+    const el = e.target.closest(BLOCK_SELECTOR)
+    if (!el) return
+    startBlockDrag(e, el, e.target.closest('.img-handle') ? 'resize' : 'move')
   })
 
   edFrame.addEventListener('dblclick', (e) => {
-    const fig = e.target.closest('figure')
-    if (!fig) return
-    const k = previewFigures.indexOf(fig)
-    if (k >= 0) writeImageAttrs(k, null)
+    const el = e.target.closest(BLOCK_SELECTOR)
+    if (!el) return
+    const k = previewBlocks.indexOf(el)
+    if (k >= 0) writeBlockAttrs(k, null)
   })
 
   window.addEventListener('mousemove', (e) => {
@@ -989,22 +1063,31 @@ const SimpptParser = (() => {
     const dx = ((e.clientX - dragCtx.startX) / dragCtx.frameRect.width) * 100
     const dy = ((e.clientY - dragCtx.startY) / dragCtx.frameRect.height) * 100
     if (dragCtx.mode === 'resize') {
-      dragCtx.fig.style.width = `${Math.max(3, dragCtx.w + dx).toFixed(1)}%`
+      if (dragCtx.isImg) {
+        dragCtx.el.style.width = `${Math.max(3, dragCtx.w + dx).toFixed(1)}%`
+      } else {
+        const s = Math.max(20, dragCtx.s + dx * 2)
+        dragCtx.el.style.transform = `scale(${(s / 100).toFixed(3)})`
+      }
     } else {
-      dragCtx.fig.style.left = `${(dragCtx.x + dx).toFixed(1)}%`
-      dragCtx.fig.style.top = `${(dragCtx.y + dy).toFixed(1)}%`
+      dragCtx.el.style.left = `${(dragCtx.x + dx).toFixed(1)}%`
+      dragCtx.el.style.top = `${(dragCtx.y + dy).toFixed(1)}%`
     }
   })
 
   window.addEventListener('mouseup', () => {
     if (!dragCtx) return
-    const { fig, k } = dragCtx
+    const { el, k, isImg } = dragCtx
     dragCtx = null
-    writeImageAttrs(k, {
-      x: parseFloat(fig.style.left).toFixed(1),
-      y: parseFloat(fig.style.top).toFixed(1),
-      w: parseFloat(fig.style.width).toFixed(1),
-    })
+    const x = parseFloat(el.style.left).toFixed(1)
+    const y = parseFloat(el.style.top).toFixed(1)
+    if (isImg) {
+      writeBlockAttrs(k, { x, y, w: parseFloat(el.style.width).toFixed(1) })
+    } else {
+      const m = (el.style.transform || '').match(/scale\(([\d.]+)\)/)
+      const s = m ? (parseFloat(m[1]) * 100).toFixed(0) : '100'
+      writeBlockAttrs(k, { x, y, s })
+    }
   })
 
   newDeckBtn.addEventListener('click', () => {
@@ -1016,6 +1099,7 @@ const SimpptParser = (() => {
   })
   edPlayBtn.addEventListener('click', playFromEditor)
   edSaveBtn.addEventListener('click', saveDeck)
+  document.getElementById('ed-reset').addEventListener('click', resetSlideLayout)
 
   document.getElementById('ed-home').addEventListener('click', () => {
     if (edDirty && !window.confirm('有未儲存的變更，確定回首頁？')) return
