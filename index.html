@@ -111,7 +111,8 @@
     border-radius: 0.5vw; display: block;
   }
   #stage-overlay { position: absolute; inset: 0; pointer-events: none; }
-  #ed-overlay { position: absolute; inset: 0; }
+  #ed-overlay { position: absolute; inset: 0; pointer-events: none; }
+  #ed-overlay > * { pointer-events: auto; }
   #ed-frame img { -webkit-user-drag: none; }
   #ed-frame .slide-scope > *, #ed-frame #ed-overlay > * { cursor: move; user-select: none; }
   #ed-overlay > *:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); }
