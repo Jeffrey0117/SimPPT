@@ -6,7 +6,7 @@ const match = html.match(/<script id="simppt-parser">([\s\S]*?)<\/script>/)
 assert.ok(match, 'index.html must contain <script id="simppt-parser">')
 
 const SimpptParser = new Function(`${match[1]}; return SimpptParser;`)()
-const { parse, renderMarkdown, slideIndexAt } = SimpptParser
+const { parse, renderMarkdown, slideIndexAt, slideLineRange, IMG_RE } = SimpptParser
 
 const tests = []
 const test = (name, fn) => tests.push({ name, fn })
@@ -138,6 +138,29 @@ test('slideIndexAt maps cursor offset to slide index', () => {
 test('slideIndexAt on the separator line itself belongs to the next slide', () => {
   const text = '# A\n---\n# B'
   assert.equal(slideIndexAt(text, text.indexOf('---')), 1)
+})
+
+test('image with {x= y= w=} renders absolutely positioned figure', () => {
+  const out = renderMarkdown('![p](a.png){x=10 y=20.5 w=30}')
+  assert.equal(out, '<figure class="img-abs" style="left:10%;top:20.5%;width:30%"><img src="a.png" alt="p"></figure>')
+})
+
+test('image attrs without x/y falls back to flow figure', () => {
+  const out = renderMarkdown('![p](a.png){w=30}')
+  assert.equal(out, '<figure><img src="a.png" alt="p"></figure>')
+})
+
+test('IMG_RE matches plain and attributed image lines', () => {
+  assert.ok(IMG_RE.test('![a](b.png)'))
+  assert.ok(IMG_RE.test('![a](b.png){x=1 y=2 w=3}'))
+  assert.ok(!IMG_RE.test('text ![a](b.png)'))
+})
+
+test('slideLineRange returns raw line span of a slide', () => {
+  const text = '---\nbg: red\n---\n# A\nline\n---\n# B'
+  assert.deepEqual(slideLineRange(text, 0), { start: 3, end: 5 })
+  assert.deepEqual(slideLineRange(text, 1), { start: 6, end: 7 })
+  assert.equal(slideLineRange(text, 2), null)
 })
 
 let failed = 0
