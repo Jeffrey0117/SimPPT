@@ -127,6 +127,14 @@
     font-size: 1.4vw; opacity: 0.55;
   }
 
+  #exit-play {
+    position: fixed; top: 1.5vh; right: 1.2vw;
+    font-size: 1.6vw; line-height: 1;
+    background: none; border: 0; color: inherit;
+    opacity: 0.2; cursor: pointer; padding: 0.5vw;
+  }
+  #exit-play:hover { opacity: 0.9; }
+
   #toast {
     position: fixed; top: 4vh; left: 50%; transform: translateX(-50%);
     background: #c0392b; color: #fff;
@@ -150,14 +158,15 @@
     <button id="open-dir">開啟資料夾</button>
   </div>
   <p class="keys">
-    <kbd>←</kbd> <kbd>→</kbd> 翻頁 · <kbd>F</kbd> 全螢幕 · <kbd>P</kbd> 頁碼 ·
-    <kbd>E</kbd> 編輯（左寫右預覽，<kbd>Ctrl+S</kbd> 存檔）
+    <kbd>←</kbd> <kbd>→</kbd> 翻頁 · <kbd>F</kbd> 全螢幕 · <kbd>Esc</kbd> 結束播放 ·
+    <kbd>P</kbd> 頁碼 · <kbd>E</kbd> 編輯（<kbd>Ctrl+S</kbd> 存檔）
   </p>
 </main>
 
 <section id="stage" hidden>
   <div id="slide-content" class="deck-slide"></div>
   <div id="indicator" hidden></div>
+  <button id="exit-play" title="結束播放（Esc）">✕</button>
 </section>
 
 <section id="editor" hidden>
@@ -826,11 +835,23 @@ const SimpptParser = (() => {
     else document.documentElement.requestFullscreen()
   }
 
+  const exitPlay = () => {
+    stopPolling()
+    stage.hidden = true
+    editor.hidden = true
+    landing.hidden = false
+    document.title = 'simppt'
+  }
+
   document.addEventListener('keydown', (e) => {
     if (!editor.hidden || !state.deck || stage.hidden) return
     const key = e.key
     if (key === 'e' || key === 'E') {
       enterEditor(state.sourceText)
+      return
+    }
+    if (key === 'Escape') {
+      if (!document.fullscreenElement) exitPlay()
       return
     }
     if (key === 'ArrowRight' || key === 'ArrowDown' || key === ' ' || key === 'PageDown') {
@@ -852,9 +873,12 @@ const SimpptParser = (() => {
 
   stage.addEventListener('click', (e) => {
     if (e.target.closest('a')) return
+    if (e.target.closest('#exit-play')) return
     if (e.clientX < window.innerWidth / 4) goTo(state.index - 1)
     else goTo(state.index + 1)
   })
+
+  document.getElementById('exit-play').addEventListener('click', exitPlay)
 
   // --- http 模式：?deck=path 直接載入 + 存檔自動重載 ---
 
