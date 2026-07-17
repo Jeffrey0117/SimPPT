@@ -6,7 +6,7 @@ const match = html.match(/<script id="simppt-parser">([\s\S]*?)<\/script>/)
 assert.ok(match, 'index.html must contain <script id="simppt-parser">')
 
 const SimpptParser = new Function(`${match[1]}; return SimpptParser;`)()
-const { parse, renderMarkdown } = SimpptParser
+const { parse, renderMarkdown, slideIndexAt } = SimpptParser
 
 const tests = []
 const test = (name, fn) => tests.push({ name, fn })
@@ -98,6 +98,25 @@ test('html in content is escaped', () => {
 test('adjacent text lines join into one paragraph, blank line splits', () => {
   const out = renderMarkdown('line one\nline two\n\nnext para')
   assert.equal(out, '<p>line one line two</p><p>next para</p>')
+})
+
+test('parse keepEmpty keeps empty slides (editor mode)', () => {
+  const deck = parse('# A\n\n---\n\n---\n\n# B', { keepEmpty: true })
+  assert.equal(deck.slides.length, 3)
+  assert.equal(deck.slides[1].body, '')
+})
+
+test('slideIndexAt maps cursor offset to slide index', () => {
+  const text = '---\nbg: red\n---\n# A\n\n---\n# B'
+  assert.equal(slideIndexAt(text, 0), 0)
+  assert.equal(slideIndexAt(text, text.indexOf('# A')), 0)
+  assert.equal(slideIndexAt(text, text.indexOf('# B')), 1)
+  assert.equal(slideIndexAt(text, text.length), 1)
+})
+
+test('slideIndexAt on the separator line itself belongs to the next slide', () => {
+  const text = '# A\n---\n# B'
+  assert.equal(slideIndexAt(text, text.indexOf('---')), 1)
 })
 
 let failed = 0

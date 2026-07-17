@@ -49,28 +49,70 @@
     display: flex; align-items: center; justify-content: center;
     user-select: none;
   }
-  #slide-content {
+  .deck-slide {
     max-width: 84vw; max-height: 88vh;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 2.5vh; text-align: center; overflow: hidden;
   }
-  #slide-content h1 { font-size: 5.5vw; font-weight: 700; line-height: 1.25; }
-  #slide-content h2 { font-size: 4vw; font-weight: 700; line-height: 1.3; }
-  #slide-content h3 { font-size: 3vw; font-weight: 600; line-height: 1.35; }
-  #slide-content p { font-size: 2.6vw; line-height: 1.65; }
-  #slide-content ul, #slide-content ol {
+  .deck-slide h1 { font-size: 5.5vw; font-weight: 700; line-height: 1.25; }
+  .deck-slide h2 { font-size: 4vw; font-weight: 700; line-height: 1.3; }
+  .deck-slide h3 { font-size: 3vw; font-weight: 600; line-height: 1.35; }
+  .deck-slide p { font-size: 2.6vw; line-height: 1.65; }
+  .deck-slide ul, .deck-slide ol {
     font-size: 2.6vw; line-height: 1.8; text-align: left; padding-left: 1.3em;
   }
-  #slide-content code {
+  .deck-slide code {
     background: rgba(128, 128, 128, 0.25);
     padding: 0.1em 0.35em; border-radius: 0.2em; font-size: 0.9em;
   }
-  #slide-content a { color: inherit; text-decoration: underline; }
-  #slide-content figure { margin: 0; }
-  #slide-content img {
+  .deck-slide a { color: inherit; text-decoration: underline; }
+  .deck-slide figure { margin: 0; }
+  .deck-slide img {
     display: block; max-width: 80vw; max-height: 68vh; border-radius: 0.5vw;
   }
+
+  #editor {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    background: #0b0b0f;
+  }
+  #editor-bar {
+    display: flex; gap: 10px; align-items: center;
+    padding: 10px 14px;
+    background: #16161d; border-bottom: 1px solid #26262f;
+  }
+  #editor-bar button {
+    font: inherit; font-size: 14px; color: #f5f5f5;
+    background: #23232e; border: 1px solid #3a3a4a; border-radius: 8px;
+    padding: 7px 18px; cursor: pointer;
+  }
+  #editor-bar button:hover { background: #2e2e3c; }
+  #ed-status { font-size: 13px; color: #77777f; margin-left: auto; }
+  #editor-body { flex: 1; display: flex; min-height: 0; }
+  #ed-text {
+    flex: 1; resize: none; border: 0; outline: none;
+    background: #0b0b0f; color: #e8e8ee;
+    font: 15px/1.7 Consolas, "Cascadia Mono", monospace;
+    padding: 18px 20px;
+  }
+  #ed-preview {
+    width: 46%; min-width: 320px;
+    border-left: 1px solid #26262f;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+    background: #101014; overflow: hidden; padding: 16px;
+  }
+  #ed-viewport {
+    overflow: hidden; border-radius: 6px;
+    box-shadow: 0 0 0 1px #26262f;
+  }
+  #ed-frame {
+    width: 100vw; height: 56.25vw;
+    transform-origin: top left;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #ed-pageinfo { font-size: 12.5px; color: #77777f; }
 
   #indicator {
     position: fixed; right: 2vw; bottom: 2.5vh;
@@ -94,19 +136,37 @@
     含圖片的簡報請拖入<strong>整個資料夾</strong>（.md 與圖片一起）。
   </p>
   <div class="buttons">
+    <button id="new-deck">新簡報</button>
     <button id="open-sample">看範例</button>
     <button id="open-file">開啟檔案</button>
     <button id="open-dir">開啟資料夾</button>
   </div>
   <p class="keys">
     <kbd>←</kbd> <kbd>→</kbd> 翻頁 · <kbd>F</kbd> 全螢幕 · <kbd>P</kbd> 頁碼 ·
-    用「開啟」按鈕載入，存檔後會自動重新整理
+    <kbd>E</kbd> 編輯（左寫右預覽，<kbd>Ctrl+S</kbd> 存檔）
   </p>
 </main>
 
 <section id="stage" hidden>
-  <div id="slide-content"></div>
+  <div id="slide-content" class="deck-slide"></div>
   <div id="indicator" hidden></div>
+</section>
+
+<section id="editor" hidden>
+  <div id="editor-bar">
+    <button id="ed-play">▶ 播放</button>
+    <button id="ed-save">儲存 .md</button>
+    <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中按 E 回編輯</span>
+  </div>
+  <div id="editor-body">
+    <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
+    <div id="ed-preview">
+      <div id="ed-viewport">
+        <div id="ed-frame"><div id="ed-content" class="deck-slide"></div></div>
+      </div>
+      <div id="ed-pageinfo"></div>
+    </div>
+  </div>
 </section>
 
 <div id="toast" hidden></div>
@@ -188,7 +248,7 @@ const SimpptParser = (() => {
     return { globals, start: close + 1 }
   }
 
-  const parse = (text) => {
+  const parse = (text, opts = {}) => {
     const lines = text.replace(/\r\n?/g, '\n').split('\n')
     const { globals, start } = parseFrontmatter(lines)
     const rawSlides = [{ meta: {}, lines: [] }]
@@ -199,8 +259,20 @@ const SimpptParser = (() => {
     }
     const slides = rawSlides
       .map((s) => ({ meta: s.meta, body: s.lines.join('\n').trim() }))
-      .filter((s) => s.body !== '' || Object.keys(s.meta).length > 0)
+      .filter((s) => opts.keepEmpty === true || s.body !== '' || Object.keys(s.meta).length > 0)
     return { globals, slides }
+  }
+
+  const slideIndexAt = (text, offset) => {
+    const norm = text.replace(/\r\n?/g, '\n')
+    const lines = norm.split('\n')
+    const { start } = parseFrontmatter(lines)
+    const cursorLine = norm.slice(0, offset).split('\n').length - 1
+    let idx = 0
+    for (let j = start; j <= cursorLine && j < lines.length; j += 1) {
+      if (SEP_RE.test(lines[j])) idx += 1
+    }
+    return idx
   }
 
   const escapeHtml = (s) => s
@@ -267,7 +339,7 @@ const SimpptParser = (() => {
     return blocks.join('')
   }
 
-  return { parse, renderMarkdown }
+  return { parse, renderMarkdown, slideIndexAt }
 })()
 </script>
 
@@ -285,6 +357,17 @@ const SimpptParser = (() => {
   const openDirBtn = document.getElementById('open-dir')
   const openSampleBtn = document.getElementById('open-sample')
   const sampleDeck = document.getElementById('sample-deck')
+  const newDeckBtn = document.getElementById('new-deck')
+  const editor = document.getElementById('editor')
+  const edText = document.getElementById('ed-text')
+  const edPreviewBox = document.getElementById('ed-preview')
+  const edViewport = document.getElementById('ed-viewport')
+  const edFrame = document.getElementById('ed-frame')
+  const edContent = document.getElementById('ed-content')
+  const edPageInfo = document.getElementById('ed-pageinfo')
+  const edStatus = document.getElementById('ed-status')
+  const edPlayBtn = document.getElementById('ed-play')
+  const edSaveBtn = document.getElementById('ed-save')
 
   const MD_RE = /\.(md|markdown)$/i
   const DEFAULT_BG = '#101014'
@@ -294,6 +377,7 @@ const SimpptParser = (() => {
     deck: null,
     index: 0,
     mdPath: '',
+    sourceText: '',
     fileMap: new Map(),
     blobUrls: new Map(),
     fileHandle: null,
@@ -361,8 +445,10 @@ const SimpptParser = (() => {
     }
     revokeBlobs()
     state.deck = deck
+    state.sourceText = text
     state.mdPath = mdPath
     state.fileMap = fileMap
+    editor.hidden = true
     state.index = Math.min(state.index, deck.slides.length - 1)
     landing.hidden = true
     stage.hidden = false
@@ -371,9 +457,13 @@ const SimpptParser = (() => {
     return true
   }
 
-  const stopPolling = () => {
+  const stopTimer = () => {
     clearInterval(state.pollTimer)
     state.pollTimer = null
+  }
+
+  const stopPolling = () => {
+    stopTimer()
     state.fileHandle = null
     state.dirHandle = null
   }
@@ -528,6 +618,167 @@ const SimpptParser = (() => {
     fileInput.value = ''
   })
 
+  // --- 編輯模式：左寫右預覽 ---
+
+  const NEW_DECK_TEMPLATE = [
+    '---', 'bg: #1a1a2e', 'color: #ffffff', '---', '',
+    '# 我的簡報', '', '副標題寫這裡', '',
+    '--- bg=#0f3460', '', '## 第二頁', '', '- 重點一', '- 重點二', '',
+  ].join('\n')
+
+  let edDirty = false
+
+  const setStatus = (msg) => { edStatus.textContent = msg }
+
+  const fitPreview = () => {
+    const w = edPreviewBox.clientWidth - 32
+    const h = edPreviewBox.clientHeight - 64
+    const scale = Math.max(0.05, Math.min(w / window.innerWidth, h / (window.innerWidth * 0.5625)))
+    edViewport.style.width = `${window.innerWidth * scale}px`
+    edViewport.style.height = `${window.innerWidth * 0.5625 * scale}px`
+    edFrame.style.transform = `scale(${scale})`
+  }
+
+  const updatePreview = () => {
+    const text = edText.value
+    const deck = SimpptParser.parse(text, { keepEmpty: true })
+    const idx = Math.min(
+      SimpptParser.slideIndexAt(text, edText.selectionStart),
+      Math.max(0, deck.slides.length - 1),
+    )
+    const slide = deck.slides[idx] || { meta: {}, body: '' }
+    const meta = { ...deck.globals, ...slide.meta }
+    edFrame.style.background = meta.bg || DEFAULT_BG
+    edFrame.style.color = meta.color || DEFAULT_COLOR
+    edContent.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
+    edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
+  }
+
+  const enterEditor = (text) => {
+    stopTimer()
+    landing.hidden = true
+    stage.hidden = true
+    editor.hidden = false
+    edText.value = text
+    edDirty = false
+    setStatus('Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中按 E 回編輯')
+    fitPreview()
+    updatePreview()
+    edText.focus()
+  }
+
+  const playFromEditor = () => {
+    const text = edText.value
+    const deck = SimpptParser.parse(text)
+    if (deck.slides.length === 0) {
+      showToast('目前內容解析不出任何頁面')
+      return
+    }
+    state.index = Math.min(
+      SimpptParser.slideIndexAt(text, edText.selectionStart),
+      deck.slides.length - 1,
+    )
+    loadDeck(text, state.mdPath || '未命名.md', state.fileMap)
+  }
+
+  const writeTo = async (handle, text) => {
+    const writable = await handle.createWritable()
+    await writable.write(text)
+    await writable.close()
+  }
+
+  const ensureRW = async (handle) => {
+    if (await handle.queryPermission({ mode: 'readwrite' }) === 'granted') return true
+    return await handle.requestPermission({ mode: 'readwrite' }) === 'granted'
+  }
+
+  const handleForPath = async (dirHandle, path) => {
+    const parts = path.split('/')
+    const dir = await parts.slice(0, -1).reduce(
+      async (acc, name) => (await acc).getDirectoryHandle(name),
+      Promise.resolve(dirHandle),
+    )
+    return dir.getFileHandle(parts[parts.length - 1], { create: true })
+  }
+
+  const downloadMd = (text) => {
+    const a = document.createElement('a')
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }))
+    a.href = url
+    a.download = (state.mdPath || '簡報.md').split('/').pop()
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+  }
+
+  const saveDeck = async () => {
+    const text = edText.value
+    try {
+      if (state.fileHandle && await ensureRW(state.fileHandle)) {
+        await writeTo(state.fileHandle, text)
+      } else if (state.dirHandle && state.mdPath && await ensureRW(state.dirHandle)) {
+        await writeTo(await handleForPath(state.dirHandle, state.mdPath), text)
+      } else if (window.showSaveFilePicker) {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: (state.mdPath || '簡報.md').split('/').pop(),
+          types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+        })
+        state.fileHandle = handle
+        state.mdPath = handle.name
+        await writeTo(handle, text)
+      } else {
+        downloadMd(text)
+      }
+      state.sourceText = text
+      edDirty = false
+      setStatus(`已儲存 ✓ ${new Date().toLocaleTimeString()}`)
+    } catch (err) {
+      if (err && err.name === 'AbortError') return
+      showToast('儲存失敗，改用下載')
+      downloadMd(text)
+    }
+  }
+
+  newDeckBtn.addEventListener('click', () => {
+    stopPolling()
+    state.mdPath = ''
+    state.fileMap = new Map()
+    state.sourceText = ''
+    enterEditor(NEW_DECK_TEMPLATE)
+  })
+  edPlayBtn.addEventListener('click', playFromEditor)
+  edSaveBtn.addEventListener('click', saveDeck)
+
+  edText.addEventListener('input', () => {
+    edDirty = true
+    setStatus('未儲存變更')
+    updatePreview()
+  })
+  edText.addEventListener('keyup', updatePreview)
+  edText.addEventListener('click', updatePreview)
+
+  window.addEventListener('resize', () => {
+    if (!editor.hidden) fitPreview()
+    if (!editor.hidden) updatePreview()
+  })
+
+  window.addEventListener('beforeunload', (e) => {
+    if (!editor.hidden && edDirty) {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+  })
+
+  document.addEventListener('keydown', (e) => {
+    if (editor.hidden) return
+    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault()
+      saveDeck()
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault()
+      playFromEditor()
+    }
+  })
+
   // --- 導覽 ---
 
   const toggleFullscreen = () => {
@@ -536,8 +787,12 @@ const SimpptParser = (() => {
   }
 
   document.addEventListener('keydown', (e) => {
-    if (!state.deck) return
+    if (!editor.hidden || !state.deck || stage.hidden) return
     const key = e.key
+    if (key === 'e' || key === 'E') {
+      enterEditor(state.sourceText)
+      return
+    }
     if (key === 'ArrowRight' || key === 'ArrowDown' || key === ' ' || key === 'PageDown') {
       e.preventDefault()
       goTo(state.index + 1)

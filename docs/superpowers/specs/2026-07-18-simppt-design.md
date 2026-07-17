@@ -58,6 +58,14 @@ color: #ffffff
 
 用「開啟檔案／資料夾」按鈕（File System Access API，Chrome/Edge）載入時，每秒 polling `lastModified`，變更即自動重新載入並停留在當前頁 — 零依賴 hot reload。拖曳載入則無自動重載（File 物件改動後不可重讀）。
 
+## 編輯模式（2026-07-18 追加）
+
+- 首頁「新簡報」或播放中按 `E` 進入：左 textarea、右即時預覽（與播放共用 `.deck-slide` 渲染，`transform: scale` 縮到 16:9 視窗，預覽頁跟著游標位置 = parser 的 `slideIndexAt`；編輯預覽用 `parse(text, {keepEmpty: true})` 讓空頁也對得上游標）。
+- 儲存（`Ctrl+S`／按鈕）優先序：fileHandle 寫回原檔 → dirHandle 依 mdPath 寫回 → `showSaveFilePicker` 另存（記住 handle）→ 下載 .md。
+- `Ctrl+Enter`／「▶ 播放」從游標所在頁開始播。
+- 進編輯器只停 polling 計時器、保留 handle（存檔才能寫回）；「新簡報」則清空 handle/mdPath（避免誤寫舊檔）。
+- 未儲存變更時 `beforeunload` 攔截。
+
 ## 不做（YAGNI）
 
 動畫轉場、程式碼高亮、匯出 PDF/PPTX、主題系統、部署、簡報者視圖。要了再加。
