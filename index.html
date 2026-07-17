@@ -82,8 +82,10 @@
   }
   .deck-slide.layout-split h1 { font-size: 4.2vw; }
   .deck-slide.layout-split .split-row {
+    flex: 1; width: 100%;
     display: flex; flex-direction: row;
-    align-items: flex-start; gap: 3.5vw; min-height: 0;
+    align-items: center; justify-content: center;
+    gap: 3.5vw; min-height: 0;
   }
   .deck-slide.layout-split figure { flex: 0 0 auto; }
   .deck-slide.layout-split img { max-width: 36vw; max-height: 32vw; }
@@ -532,6 +534,7 @@ const SimpptParser = (() => {
     stage.hidden = false
     document.title = `simppt — ${mdPath.split('/').pop()}`
     renderSlide()
+    scheduleSave()
     return true
   }
 
@@ -552,6 +555,7 @@ const SimpptParser = (() => {
     if (clamped === state.index) return
     state.index = clamped
     renderSlide()
+    scheduleSave()
   }
 
   const pickMdPath = (fileMap) =>
@@ -775,6 +779,7 @@ const SimpptParser = (() => {
     fitPreview()
     updatePreview()
     edText.focus()
+    scheduleSave()
   }
 
   const playFromEditor = () => {
@@ -842,6 +847,7 @@ const SimpptParser = (() => {
       state.sourceText = text
       edDirty = false
       setStatus(`已儲存 ✓ ${new Date().toLocaleTimeString()}`)
+      scheduleSave()
     } catch (err) {
       if (err && err.name === 'AbortError') return
       showToast('儲存失敗，改用下載')
@@ -862,6 +868,7 @@ const SimpptParser = (() => {
   document.getElementById('ed-home').addEventListener('click', () => {
     if (edDirty && !window.confirm('有未儲存的變更，確定回首頁？')) return
     stopPolling()
+    clearSession()
     editor.hidden = true
     stage.hidden = true
     landing.hidden = false
@@ -872,6 +879,7 @@ const SimpptParser = (() => {
     edDirty = true
     setStatus('未儲存變更')
     updatePreview()
+    scheduleSave()
   })
   edText.addEventListener('keyup', updatePreview)
   edText.addEventListener('click', updatePreview)
@@ -881,12 +889,7 @@ const SimpptParser = (() => {
     if (!editor.hidden) updatePreview()
   })
 
-  window.addEventListener('beforeunload', (e) => {
-    if (!editor.hidden && edDirty) {
-      e.preventDefault()
-      e.returnValue = ''
-    }
-  })
+  window.addEventListener('beforeunload', () => saveSession())
 
   document.addEventListener('keydown', (e) => {
     if (editor.hidden) return
@@ -947,6 +950,104 @@ const SimpptParser = (() => {
 
   document.getElementById('exit-play').addEventListener('click', exitPlay)
 
+  // --- 會話保存：重整後留在原地 ---
+
+  const idbOpen = () => new Promise((resolve, reject) => {
+    const req = indexedDB.open('simppt', 1)
+    req.onupgradeneeded = () => req.result.createObjectStore('kv')
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+
+  const idbSet = async (key, val) => {
+    const db = await idbOpen()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite')
+      tx.objectStore('kv').put(val, key)
+      tx.oncomplete = resolve
+      tx.onerror = () => reject(tx.error)
+    })
+  }
+
+  const idbGet = async (key) => {
+    const db = await idbOpen()
+    return new Promise((resolve, reject) => {
+      const req = db.transaction('kv', 'readonly').objectStore('kv').get(key)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+  }
+
+  const saveSession = () => {
+    const session = {
+      view: !editor.hidden ? 'editor' : (!stage.hidden ? 'play' : 'landing'),
+      text: !editor.hidden ? edText.value : state.sourceText,
+      mdPath: state.mdPath,
+      index: state.index,
+      dirty: edDirty,
+    }
+    try {
+      localStorage.setItem('simppt-session', JSON.stringify(session))
+    } catch {
+      // localStorage 滿了或被擋 — 略過
+    }
+    idbSet('fileHandle', state.fileHandle || null).catch(() => {})
+    idbSet('dirHandle', state.dirHandle || null).catch(() => {})
+  }
+
+  let saveTimer = null
+  const scheduleSave = () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(saveSession, 300)
+  }
+
+  const clearSession = () => {
+    localStorage.removeItem('simppt-session')
+    idbSet('fileHandle', null).catch(() => {})
+    idbSet('dirHandle', null).catch(() => {})
+  }
+
+  const restoreSession = async () => {
+    const raw = localStorage.getItem('simppt-session')
+    if (!raw) return false
+    try {
+      const s = JSON.parse(raw)
+      if (!s.text || s.view === 'landing') return false
+      state.mdPath = s.mdPath || ''
+      try {
+        state.fileHandle = (await idbGet('fileHandle')) || null
+        state.dirHandle = (await idbGet('dirHandle')) || null
+      } catch {
+        // handle 讀不回來就當純文字繼續
+      }
+      if (state.dirHandle) {
+        try {
+          if (await state.dirHandle.queryPermission({ mode: 'read' }) === 'granted') {
+            const fileMap = new Map()
+            await walkDirHandle(state.dirHandle, '', fileMap)
+            state.fileMap = fileMap
+          }
+        } catch {
+          // 權限沒了 — 圖片等重新授權後恢復
+        }
+      }
+      state.sourceText = s.text
+      if (s.view === 'play') {
+        state.index = s.index || 0
+        loadDeck(s.text, state.mdPath || '未命名.md', state.fileMap)
+      } else {
+        enterEditor(s.text)
+        if (s.dirty) {
+          edDirty = true
+          setStatus('未儲存變更（重整前的內容已還原）')
+        }
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
   // --- http 模式：?deck=path 直接載入 + 存檔自動重載 ---
 
   const initFromQuery = async () => {
@@ -976,8 +1077,19 @@ const SimpptParser = (() => {
       stopPolling()
       state.pollTimer = setInterval(load, 1000)
     }
+    return true
   }
-  initFromQuery()
+
+  const boot = async () => {
+    const hasDeckParam = /^https?:$/.test(location.protocol)
+      && new URLSearchParams(location.search).get('deck')
+    if (hasDeckParam) {
+      await initFromQuery()
+      return
+    }
+    await restoreSession()
+  }
+  boot()
 })()
 </script>
 </body>
