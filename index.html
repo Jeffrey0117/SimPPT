@@ -148,8 +148,8 @@
 <main id="landing">
   <h1>simppt</h1>
   <p class="hint">
-    拖入 <strong>.md</strong> 簡報檔到視窗任意處，<br>
-    含圖片的簡報請拖入<strong>整個資料夾</strong>（.md 與圖片一起）。
+    「開啟檔案／資料夾」會進<strong>編輯器</strong>（左寫右預覽）；<br>
+    拖入 .md 或資料夾則<strong>直接播放</strong>。
   </p>
   <div class="buttons">
     <button id="new-deck">新簡報</button>
@@ -166,14 +166,15 @@
 <section id="stage" hidden>
   <div id="slide-content" class="deck-slide"></div>
   <div id="indicator" hidden></div>
-  <button id="exit-play" title="結束播放（Esc）">✕</button>
+  <button id="exit-play" title="回編輯（Esc）">✕</button>
 </section>
 
 <section id="editor" hidden>
   <div id="editor-bar">
     <button id="ed-play">▶ 播放</button>
     <button id="ed-save">儲存 .md</button>
-    <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中按 E 回編輯</span>
+    <button id="ed-home">首頁</button>
+    <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
   </div>
   <div id="editor-body">
     <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
@@ -600,11 +601,9 @@ const SimpptParser = (() => {
     }
   }
 
-  const startPolling = () => {
+  const startHandleWatch = () => {
     clearInterval(state.pollTimer)
-    state.lastModified = 0
     state.pollTimer = setInterval(reloadFromHandles, 1000)
-    return reloadFromHandles()
   }
 
   openSampleBtn.addEventListener('click', () => {
@@ -622,10 +621,16 @@ const SimpptParser = (() => {
       const [handle] = await window.showOpenFilePicker({
         types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'] } }],
       })
+      const file = await handle.getFile()
       stopPolling()
+      revokeBlobs()
       state.fileHandle = handle
+      state.mdPath = file.name
+      state.fileMap = new Map()
+      state.sourceText = await file.text()
+      state.lastModified = file.lastModified
       state.index = 0
-      await startPolling()
+      enterEditor(state.sourceText)
     } catch {
       // 使用者取消
     }
@@ -638,10 +643,23 @@ const SimpptParser = (() => {
     }
     try {
       const handle = await window.showDirectoryPicker()
+      const fileMap = new Map()
+      await walkDirHandle(handle, '', fileMap)
+      const mdPath = pickMdPath(fileMap)
+      if (!mdPath) {
+        showToast('資料夾裡找不到 .md 檔')
+        return
+      }
+      const file = fileMap.get(mdPath)
       stopPolling()
+      revokeBlobs()
       state.dirHandle = handle
+      state.mdPath = mdPath
+      state.fileMap = fileMap
+      state.sourceText = await file.text()
+      state.lastModified = file.lastModified
       state.index = 0
-      await startPolling()
+      enterEditor(state.sourceText)
     } catch {
       // 使用者取消
     }
@@ -651,8 +669,12 @@ const SimpptParser = (() => {
     const file = fileInput.files[0]
     if (!file) return
     stopPolling()
+    revokeBlobs()
+    state.mdPath = file.name
+    state.fileMap = new Map()
+    state.sourceText = await file.text()
     state.index = 0
-    loadDeck(await file.text(), file.name, new Map())
+    enterEditor(state.sourceText)
     fileInput.value = ''
   })
 
@@ -728,6 +750,7 @@ const SimpptParser = (() => {
       deck.slides.length - 1,
     )
     loadDeck(text, state.mdPath || '未命名.md', state.fileMap)
+    if (state.fileHandle || state.dirHandle) startHandleWatch()
   }
 
   const writeTo = async (handle, text) => {
@@ -797,6 +820,15 @@ const SimpptParser = (() => {
   edPlayBtn.addEventListener('click', playFromEditor)
   edSaveBtn.addEventListener('click', saveDeck)
 
+  document.getElementById('ed-home').addEventListener('click', () => {
+    if (edDirty && !window.confirm('有未儲存的變更，確定回首頁？')) return
+    stopPolling()
+    editor.hidden = true
+    stage.hidden = true
+    landing.hidden = false
+    document.title = 'simppt'
+  })
+
   edText.addEventListener('input', () => {
     edDirty = true
     setStatus('未儲存變更')
@@ -836,11 +868,7 @@ const SimpptParser = (() => {
   }
 
   const exitPlay = () => {
-    stopPolling()
-    stage.hidden = true
-    editor.hidden = true
-    landing.hidden = false
-    document.title = 'simppt'
+    enterEditor(state.sourceText)
   }
 
   document.addEventListener('keydown', (e) => {
