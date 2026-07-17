@@ -94,6 +94,7 @@
     含圖片的簡報請拖入<strong>整個資料夾</strong>（.md 與圖片一起）。
   </p>
   <div class="buttons">
+    <button id="open-sample">看範例</button>
     <button id="open-file">開啟檔案</button>
     <button id="open-dir">開啟資料夾</button>
   </div>
@@ -110,6 +111,52 @@
 
 <div id="toast" hidden></div>
 <input id="file-input" type="file" accept=".md,.markdown,.txt" hidden>
+
+<script type="text/markdown" id="sample-deck">
+---
+bg: #1a1a2e
+color: #ffffff
+---
+
+# simppt
+
+超簡單的 Markdown 簡報
+
+--- bg=#0f3460
+
+## 就是這麼簡單
+
+- 一行一行寫
+- `---` 分頁
+- 分隔線加 `bg=#xxx` 換背景色
+
+--- bg=#16213e
+
+### 也支援
+
+**粗體**、*斜體*、`程式碼`
+
+1. 有序列表
+2. 也可以
+
+--- bg=#e94560 color=#1a1a2e
+
+# 純色大字頁
+
+拿來當章節分隔
+
+--- bg=#101014
+
+![封面圖](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NjAiIGhlaWdodD0iNTQwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM2YzllZjgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNlOTQ1NjAiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iOTYwIiBoZWlnaHQ9IjU0MCIgcng9IjI0IiBmaWxsPSJ1cmwoI2cpIi8+PHRleHQgeD0iNDgwIiB5PSIyNTAiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWksc2Fucy1zZXJpZiIgZm9udC1zaXplPSI5NiIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iI2ZmZmZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+c2ltcHB0PC90ZXh0Pjx0ZXh0IHg9IjQ4MCIgeT0iMzMwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzQiIGZpbGw9IiNmZmZmZmZjYyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+bWFya2Rvd24gaW4sIHNsaWRlcyBvdXQ8L3RleHQ+PC9zdmc+)
+
+圖片和 .md 放同資料夾，整包拖進來就會顯示
+
+--- bg=#1a1a2e
+
+## 換你了
+
+按 `Esc` 離開全螢幕，拖入你的 .md 開始
+</script>
 
 <script id="simppt-parser">
 const SimpptParser = (() => {
@@ -236,6 +283,8 @@ const SimpptParser = (() => {
   const fileInput = document.getElementById('file-input')
   const openFileBtn = document.getElementById('open-file')
   const openDirBtn = document.getElementById('open-dir')
+  const openSampleBtn = document.getElementById('open-sample')
+  const sampleDeck = document.getElementById('sample-deck')
 
   const MD_RE = /\.(md|markdown)$/i
   const DEFAULT_BG = '#101014'
@@ -429,6 +478,12 @@ const SimpptParser = (() => {
     state.pollTimer = setInterval(reloadFromHandles, 1000)
     return reloadFromHandles()
   }
+
+  openSampleBtn.addEventListener('click', () => {
+    stopPolling()
+    state.index = 0
+    loadDeck(sampleDeck.textContent.trim(), 'sample.md', new Map())
+  })
 
   openFileBtn.addEventListener('click', async () => {
     if (!window.showOpenFilePicker) {
