@@ -35,3 +35,13 @@ color: #ffffff
 ![封面圖](img/sample.svg)
 
 圖片和 .md 放同資料夾，整包拖進來就會顯示
+
+--- layout=split
+
+![左邊的圖](img/sample.svg)
+
+# 左圖右文
+
+`layout=split` 版型：
+圖固定在左，文字在右邊慢慢寫，
+不會被圖擠到下面去。

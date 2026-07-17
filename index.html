@@ -75,6 +75,19 @@
   }
   .deck-slide.layout-top h1 { font-size: 4.6vw; }
   .deck-slide.layout-top p { font-size: 2.4vw; line-height: 1.75; max-width: 70vw; }
+  .deck-slide.layout-split {
+    width: 88vw; max-width: 88vw;
+    flex-direction: row; align-items: center; justify-content: center;
+    gap: 3.5vw; text-align: left;
+  }
+  .deck-slide.layout-split figure { flex: 0 0 auto; }
+  .deck-slide.layout-split img { max-width: 44vw; max-height: 40vw; }
+  .deck-slide.layout-split .split-text {
+    display: flex; flex-direction: column;
+    align-items: flex-start; gap: 2vw; min-width: 0;
+  }
+  .deck-slide.layout-split h1 { font-size: 3.8vw; }
+  .deck-slide.layout-split p { font-size: 2.2vw; line-height: 1.7; }
   .deck-slide figure { margin: 0; }
   .deck-slide img {
     display: block; max-width: 80vw; max-height: 68vh; border-radius: 0.5vw;
@@ -459,14 +472,27 @@ const SimpptParser = (() => {
     return state.blobUrls.get(hit.key)
   }
 
+  const LAYOUTS = ['top', 'split']
+
+  const applyLayout = (container, layout) => {
+    container.className = `deck-slide${LAYOUTS.includes(layout) ? ` layout-${layout}` : ''}`
+    if (layout !== 'split') return
+    const fig = container.querySelector('figure')
+    if (!fig) return
+    const wrap = document.createElement('div')
+    wrap.className = 'split-text'
+    for (const el of [...container.children].filter((c) => c !== fig)) wrap.appendChild(el)
+    container.appendChild(wrap)
+  }
+
   const renderSlide = () => {
     const slide = state.deck.slides[state.index]
     const meta = { ...state.deck.globals, ...slide.meta }
     stage.style.background = meta.bg || DEFAULT_BG
     stage.style.color = meta.color || DEFAULT_COLOR
     stage.style.setProperty('--accent', meta.accent || 'inherit')
-    content.className = `deck-slide${meta.layout === 'top' ? ' layout-top' : ''}`
     content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
+    applyLayout(content, meta.layout)
     indicator.textContent = `${state.index + 1} / ${state.deck.slides.length}`
   }
 
@@ -720,8 +746,8 @@ const SimpptParser = (() => {
     edFrame.style.background = meta.bg || DEFAULT_BG
     edFrame.style.color = meta.color || DEFAULT_COLOR
     edFrame.style.setProperty('--accent', meta.accent || 'inherit')
-    edContent.className = `deck-slide${meta.layout === 'top' ? ' layout-top' : ''}`
     edContent.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
+    applyLayout(edContent, meta.layout)
     edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
   }
 
