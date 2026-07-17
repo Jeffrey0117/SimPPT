@@ -1,0 +1,10 @@
+{
+  "name": "simppt",
+  "version": "0.2.0",
+  "description": "超簡單零依賴的單檔 Markdown 簡報播放器",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/parser.test.mjs"
+  }
+}
