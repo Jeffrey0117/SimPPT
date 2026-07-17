@@ -43,6 +43,8 @@ color: #ffffff
 
 - `---` 獨立一行＝分頁（恰好三個 dash）
 - 支援：`#`/`##`/`###` 標題、無序/有序列表、圖片、粗斜體、行內 code、連結、段落
+- `accent: #d84a3f`（frontmatter 或分隔線 `accent=`）：**粗體**自動帶這個顏色，標重點用
+- `--- layout=top`：標題在上、內文在下、左對齊的版型（預設是置中）；現成版型見 `decks/templates.md`
 
 ## 操作
 

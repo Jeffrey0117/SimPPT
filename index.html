@@ -67,6 +67,14 @@
     padding: 0.1em 0.35em; border-radius: 0.2em; font-size: 0.9em;
   }
   .deck-slide a { color: inherit; text-decoration: underline; }
+  .deck-slide strong { color: var(--accent, inherit); }
+  .deck-slide.layout-top {
+    width: 84vw; height: 49.5vw; max-height: none;
+    align-items: flex-start; justify-content: flex-start;
+    text-align: left; gap: 2.5vw; padding-top: 4.5vw;
+  }
+  .deck-slide.layout-top h1 { font-size: 4.6vw; }
+  .deck-slide.layout-top p { font-size: 2.4vw; line-height: 1.75; max-width: 70vw; }
   .deck-slide figure { margin: 0; }
   .deck-slide img {
     display: block; max-width: 80vw; max-height: 68vh; border-radius: 0.5vw;
@@ -428,6 +436,8 @@ const SimpptParser = (() => {
     const meta = { ...state.deck.globals, ...slide.meta }
     stage.style.background = meta.bg || DEFAULT_BG
     stage.style.color = meta.color || DEFAULT_COLOR
+    stage.style.setProperty('--accent', meta.accent || 'inherit')
+    content.className = `deck-slide${meta.layout === 'top' ? ' layout-top' : ''}`
     content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
     indicator.textContent = `${state.index + 1} / ${state.deck.slides.length}`
   }
@@ -621,9 +631,13 @@ const SimpptParser = (() => {
   // --- 編輯模式：左寫右預覽 ---
 
   const NEW_DECK_TEMPLATE = [
-    '---', 'bg: #1a1a2e', 'color: #ffffff', '---', '',
-    '# 我的簡報', '', '副標題寫這裡', '',
-    '--- bg=#0f3460', '', '## 第二頁', '', '- 重點一', '- 重點二', '',
+    '---', 'bg: #f7f4ef', 'color: #26221e', 'accent: #d84a3f', '---', '',
+    '# 大標題寫這裡', '',
+    '下面放說明文字，重點用 **粗體** 標出來會帶主題色。', '',
+    '--- layout=top', '',
+    '# 標題在上面這種', '',
+    '內文在下面，左對齊慢慢寫。', '',
+    '**粗體關鍵字** 一樣會標色。', '',
   ].join('\n')
 
   let edDirty = false
@@ -650,6 +664,8 @@ const SimpptParser = (() => {
     const meta = { ...deck.globals, ...slide.meta }
     edFrame.style.background = meta.bg || DEFAULT_BG
     edFrame.style.color = meta.color || DEFAULT_COLOR
+    edFrame.style.setProperty('--accent', meta.accent || 'inherit')
+    edContent.className = `deck-slide${meta.layout === 'top' ? ' layout-top' : ''}`
     edContent.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
     edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
   }
