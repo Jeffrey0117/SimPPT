@@ -76,19 +76,23 @@
   .deck-slide.layout-top h1 { font-size: 4.6vw; }
   .deck-slide.layout-top p { font-size: 2.4vw; line-height: 1.75; max-width: 70vw; }
   .deck-slide.layout-split {
-    width: 88vw; max-width: 88vw; height: 49.5vw; max-height: none;
-    flex-direction: row; align-items: flex-start; justify-content: center;
-    gap: 3.5vw; text-align: left; padding-top: 4.5vw;
+    width: 84vw; height: 49.5vw; max-height: none;
+    flex-direction: column; align-items: flex-start; justify-content: flex-start;
+    gap: 2.8vw; text-align: left; padding-top: 4.5vw;
+  }
+  .deck-slide.layout-split h1 { font-size: 4.2vw; }
+  .deck-slide.layout-split .split-row {
+    display: flex; flex-direction: row;
+    align-items: flex-start; gap: 3.5vw; min-height: 0;
   }
   .deck-slide.layout-split figure { flex: 0 0 auto; }
+  .deck-slide.layout-split img { max-width: 36vw; max-height: 32vw; }
   .deck-slide.layout-split .split-text {
     display: flex; flex-direction: column;
     align-items: flex-start; gap: 1.8vw; min-width: 0;
   }
-  .deck-slide.layout-split h1 { font-size: 3.4vw; }
-  .deck-slide.layout-split h2 { font-size: 2.8vw; }
-  .deck-slide.layout-split p { font-size: 2vw; line-height: 1.7; }
-  .deck-slide.layout-split img { max-width: 38vw; max-height: 36vw; }
+  .deck-slide.layout-split .split-text h2 { font-size: 2.8vw; }
+  .deck-slide.layout-split p { font-size: 2.1vw; line-height: 1.7; }
   .deck-slide figure { margin: 0; }
   .deck-slide img {
     display: block; max-width: 80vw; max-height: 68vh; border-radius: 0.5vw;
@@ -480,10 +484,18 @@ const SimpptParser = (() => {
     if (layout !== 'split') return
     const fig = container.querySelector('figure')
     if (!fig) return
+    const children = [...container.children]
+    const heading = children.find((el) => /^H[1-3]$/.test(el.tagName))
+    const row = document.createElement('div')
+    row.className = 'split-row'
     const wrap = document.createElement('div')
     wrap.className = 'split-text'
-    for (const el of [...container.children].filter((c) => c !== fig)) wrap.appendChild(el)
-    container.appendChild(wrap)
+    for (const el of children) {
+      if (el !== fig && el !== heading) wrap.appendChild(el)
+    }
+    row.appendChild(fig)
+    row.appendChild(wrap)
+    container.appendChild(row)
   }
 
   const renderSlide = () => {
