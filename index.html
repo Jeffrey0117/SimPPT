@@ -259,15 +259,32 @@ const SimpptParser = (() => {
   const parse = (text, opts = {}) => {
     const lines = text.replace(/\r\n?/g, '\n').split('\n')
     const { globals, start } = parseFrontmatter(lines)
-    const rawSlides = [{ meta: {}, lines: [] }]
+    const rawSlides = [{ meta: {}, sticky: false, lines: [] }]
     for (let j = start; j < lines.length; j += 1) {
       const m = lines[j].match(SEP_RE)
-      if (m) rawSlides.push({ meta: m[1] ? parseDirectives(m[1]) : {}, lines: [] })
-      else rawSlides[rawSlides.length - 1].lines.push(lines[j])
+      if (m) {
+        const raw = m[1] || ''
+        rawSlides.push({
+          meta: parseDirectives(raw),
+          sticky: raw.split(/\s+/).includes('set'),
+          lines: [],
+        })
+      } else {
+        rawSlides[rawSlides.length - 1].lines.push(lines[j])
+      }
     }
+    let defaults = {}
     const slides = rawSlides
-      .map((s) => ({ meta: s.meta, body: s.lines.join('\n').trim() }))
-      .filter((s) => opts.keepEmpty === true || s.body !== '' || Object.keys(s.meta).length > 0)
+      .map((s) => {
+        if (s.sticky) defaults = { ...defaults, ...s.meta }
+        return {
+          meta: { ...defaults, ...s.meta },
+          ownMeta: s.meta,
+          body: s.lines.join('\n').trim(),
+        }
+      })
+      .filter((s) => opts.keepEmpty === true || s.body !== '' || Object.keys(s.ownMeta).length > 0)
+      .map(({ meta, body }) => ({ meta, body }))
     return { globals, slides }
   }
 
@@ -633,13 +650,18 @@ const SimpptParser = (() => {
   // --- 編輯模式：左寫右預覽 ---
 
   const NEW_DECK_TEMPLATE = [
-    '---', 'bg: #f7f4ef', 'color: #26221e', 'accent: #d84a3f', '---', '',
-    '# 大標題寫這裡', '',
-    '下面放說明文字，重點用 **粗體** 標出來會帶主題色。', '',
+    '---', 'bg: #0d0d0f', 'color: #f5f5f5', 'accent: #f4b860', '---', '',
+    '# 開場大標題', '',
+    '前幾張黑底白字，重點用 **粗體** 標色。', '',
+    '---', '',
+    '# 繼續黑底', '',
+    '沒設定就繼承前面。', '',
+    '--- set bg=#ffffff color=#1c1c1e accent=#d84a3f', '',
+    '# 從這張起白底黑字', '',
+    '分隔線寫 set = 之後都這樣。', '',
     '--- layout=top', '',
-    '# 標題在上面這種', '',
-    '內文在下面，左對齊慢慢寫。', '',
-    '**粗體關鍵字** 一樣會標色。', '',
+    '# 內容頁標題在上', '',
+    '內文在下，**粗體關鍵字**標色。', '',
   ].join('\n')
 
   let edDirty = false

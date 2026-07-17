@@ -100,6 +100,27 @@ test('adjacent text lines join into one paragraph, blank line splits', () => {
   assert.equal(out, '<p>line one line two</p><p>next para</p>')
 })
 
+test('separator "set" makes directives sticky for later slides', () => {
+  const deck = parse('# A\n\n--- set bg=#fff color=#111\n\n# B\n\n---\n\n# C')
+  assert.deepEqual(deck.slides[0].meta, {})
+  assert.deepEqual(deck.slides[1].meta, { bg: '#fff', color: '#111' })
+  assert.deepEqual(deck.slides[2].meta, { bg: '#fff', color: '#111' })
+})
+
+test('non-sticky directive applies to its slide only, then falls back to set defaults', () => {
+  const deck = parse('--- set bg=#000\n\n# A\n\n--- bg=#e94560\n\n# B\n\n---\n\n# C')
+  assert.equal(deck.slides[0].meta.bg, '#000')
+  assert.equal(deck.slides[1].meta.bg, '#e94560')
+  assert.equal(deck.slides[2].meta.bg, '#000')
+})
+
+test('empty slides after a "set" are still dropped (inherited meta does not count)', () => {
+  const deck = parse('--- set bg=#fff\n\n# A\n\n---\n\n---\n\n# B')
+  assert.equal(deck.slides.length, 2)
+  assert.equal(deck.slides[1].body, '# B')
+  assert.equal(deck.slides[1].meta.bg, '#fff')
+})
+
 test('parse keepEmpty keeps empty slides (editor mode)', () => {
   const deck = parse('# A\n\n---\n\n---\n\n# B', { keepEmpty: true })
   assert.equal(deck.slides.length, 3)
