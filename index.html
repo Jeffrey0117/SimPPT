@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>simppt</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    background: #101014;
+    color: #f5f5f5;
+    overflow: hidden;
+  }
+  body.dragover::after {
+    content: "放開以載入簡報";
+    position: fixed; inset: 12px;
+    display: flex; align-items: center; justify-content: center;
+    border: 3px dashed #6c9ef8; border-radius: 16px;
+    background: rgba(16, 16, 20, 0.85);
+    font-size: 28px; color: #6c9ef8;
+    z-index: 20; pointer-events: none;
+  }
+
+  #landing {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 22px; text-align: center; padding: 24px;
+  }
+  #landing h1 { font-size: 56px; letter-spacing: 2px; }
+  #landing .hint { font-size: 17px; color: #b9b9c4; line-height: 1.8; }
+  #landing .buttons { display: flex; gap: 14px; }
+  #landing button {
+    font: inherit; font-size: 16px; color: #f5f5f5;
+    background: #23232e; border: 1px solid #3a3a4a; border-radius: 10px;
+    padding: 12px 26px; cursor: pointer;
+  }
+  #landing button:hover { background: #2e2e3c; }
+  #landing .keys { font-size: 13px; color: #77777f; }
+  #landing kbd {
+    background: #23232e; border: 1px solid #3a3a4a; border-radius: 4px;
+    padding: 1px 6px; font-family: inherit;
+  }
+
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none;
+  }
+  #slide-content {
+    max-width: 84vw; max-height: 88vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2.5vh; text-align: center; overflow: hidden;
+  }
+  #slide-content h1 { font-size: 5.5vw; font-weight: 700; line-height: 1.25; }
+  #slide-content h2 { font-size: 4vw; font-weight: 700; line-height: 1.3; }
+  #slide-content h3 { font-size: 3vw; font-weight: 600; line-height: 1.35; }
+  #slide-content p { font-size: 2.6vw; line-height: 1.65; }
+  #slide-content ul, #slide-content ol {
+    font-size: 2.6vw; line-height: 1.8; text-align: left; padding-left: 1.3em;
+  }
+  #slide-content code {
+    background: rgba(128, 128, 128, 0.25);
+    padding: 0.1em 0.35em; border-radius: 0.2em; font-size: 0.9em;
+  }
+  #slide-content a { color: inherit; text-decoration: underline; }
+  #slide-content figure { margin: 0; }
+  #slide-content img {
+    display: block; max-width: 80vw; max-height: 68vh; border-radius: 0.5vw;
+  }
+
+  #indicator {
+    position: fixed; right: 2vw; bottom: 2.5vh;
+    font-size: 1.4vw; opacity: 0.55;
+  }
+
+  #toast {
+    position: fixed; top: 4vh; left: 50%; transform: translateX(-50%);
+    background: #c0392b; color: #fff;
+    padding: 10px 22px; border-radius: 8px; font-size: 15px; z-index: 30;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<main id="landing">
+  <h1>simppt</h1>
+  <p class="hint">
+    拖入 <strong>.md</strong> 簡報檔到視窗任意處，<br>
+    含圖片的簡報請拖入<strong>整個資料夾</strong>（.md 與圖片一起）。
+  </p>
+  <div class="buttons">
+    <button id="open-file">開啟檔案</button>
+    <button id="open-dir">開啟資料夾</button>
+  </div>
+  <p class="keys">
+    <kbd>←</kbd> <kbd>→</kbd> 翻頁 · <kbd>F</kbd> 全螢幕 · <kbd>P</kbd> 頁碼 ·
+    用「開啟」按鈕載入，存檔後會自動重新整理
+  </p>
+</main>
+
+<section id="stage" hidden>
+  <div id="slide-content"></div>
+  <div id="indicator" hidden></div>
+</section>
+
+<div id="toast" hidden></div>
+<input id="file-input" type="file" accept=".md,.markdown,.txt" hidden>
+
+<script id="simppt-parser">
+const SimpptParser = (() => {
+  'use strict'
+
+  const KV_RE = /^([A-Za-z_][\w-]*)\s*:\s*(.+)$/
+  const SEP_RE = /^\s*---(?:[ \t]+(.*?))?[ \t]*$/
+  const IMG_RE = /^!\[([^\]]*)\]\(([^)]+)\)$/
+
+  const parseDirectives = (raw) =>
+    raw.split(/\s+/).filter(Boolean).reduce((acc, pair) => {
+      const eq = pair.indexOf('=')
+      return eq > 0 ? { ...acc, [pair.slice(0, eq)]: pair.slice(eq + 1) } : acc
+    }, {})
+
+  const parseFrontmatter = (lines) => {
+    if (lines.length === 0 || lines[0].trim() !== '---') return { globals: {}, start: 0 }
+    let close = -1
+    for (let j = 1; j < lines.length; j += 1) {
+      const t = lines[j].trim()
+      if (t === '---') { close = j; break }
+      if (t !== '' && !KV_RE.test(t)) break
+    }
+    if (close < 0) return { globals: {}, start: 0 }
+    const globals = lines.slice(1, close).reduce((acc, line) => {
+      const m = line.trim().match(KV_RE)
+      return m ? { ...acc, [m[1]]: m[2].trim() } : acc
+    }, {})
+    return { globals, start: close + 1 }
+  }
+
+  const parse = (text) => {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n')
+    const { globals, start } = parseFrontmatter(lines)
+    const rawSlides = [{ meta: {}, lines: [] }]
+    for (let j = start; j < lines.length; j += 1) {
+      const m = lines[j].match(SEP_RE)
+      if (m) rawSlides.push({ meta: m[1] ? parseDirectives(m[1]) : {}, lines: [] })
+      else rawSlides[rawSlides.length - 1].lines.push(lines[j])
+    }
+    const slides = rawSlides
+      .map((s) => ({ meta: s.meta, body: s.lines.join('\n').trim() }))
+      .filter((s) => s.body !== '' || Object.keys(s.meta).length > 0)
+    return { globals, slides }
+  }
+
+  const escapeHtml = (s) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+  const inline = (s) => s
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+
+  const renderMarkdown = (body, resolveSrc = (src) => src) => {
+    const lines = body.replace(/\r\n?/g, '\n').split('\n')
+    const blocks = []
+    let list = null
+    let para = []
+    const flushPara = () => {
+      if (para.length > 0) blocks.push(`<p>${inline(escapeHtml(para.join(' ')))}</p>`)
+      para = []
+    }
+    const flushList = () => {
+      if (list) blocks.push(`<${list.tag}>${list.items.map((i) => `<li>${i}</li>`).join('')}</${list.tag}>`)
+      list = null
+    }
+    for (const raw of lines) {
+      const line = raw.trim()
+      if (line === '') { flushPara(); flushList(); continue }
+      const img = line.match(IMG_RE)
+      if (img) {
+        flushPara(); flushList()
+        blocks.push(`<figure><img src="${escapeHtml(resolveSrc(img[2]))}" alt="${escapeHtml(img[1])}"></figure>`)
+        continue
+      }
+      const h = line.match(/^(#{1,3})\s+(.*)$/)
+      if (h) {
+        flushPara(); flushList()
+        blocks.push(`<h${h[1].length}>${inline(escapeHtml(h[2]))}</h${h[1].length}>`)
+        continue
+      }
+      const ul = line.match(/^[-*]\s+(.*)$/)
+      if (ul) {
+        flushPara()
+        if (list && list.tag !== 'ul') flushList()
+        list = list || { tag: 'ul', items: [] }
+        list.items.push(inline(escapeHtml(ul[1])))
+        continue
+      }
+      const ol = line.match(/^\d+\.\s+(.*)$/)
+      if (ol) {
+        flushPara()
+        if (list && list.tag !== 'ol') flushList()
+        list = list || { tag: 'ol', items: [] }
+        list.items.push(inline(escapeHtml(ol[1])))
+        continue
+      }
+      flushList()
+      para.push(line)
+    }
+    flushPara()
+    flushList()
+    return blocks.join('')
+  }
+
+  return { parse, renderMarkdown }
+})()
+</script>
+
+<script>
+(() => {
+  'use strict'
+
+  const landing = document.getElementById('landing')
+  const stage = document.getElementById('stage')
+  const content = document.getElementById('slide-content')
+  const indicator = document.getElementById('indicator')
+  const toast = document.getElementById('toast')
+  const fileInput = document.getElementById('file-input')
+  const openFileBtn = document.getElementById('open-file')
+  const openDirBtn = document.getElementById('open-dir')
+
+  const MD_RE = /\.(md|markdown)$/i
+  const DEFAULT_BG = '#101014'
+  const DEFAULT_COLOR = '#f5f5f5'
+
+  const state = {
+    deck: null,
+    index: 0,
+    mdPath: '',
+    fileMap: new Map(),
+    blobUrls: new Map(),
+    fileHandle: null,
+    dirHandle: null,
+    lastModified: 0,
+    pollTimer: null,
+  }
+
+  let toastTimer = null
+  const showToast = (msg) => {
+    toast.textContent = msg
+    toast.hidden = false
+    clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => { toast.hidden = true }, 3500)
+  }
+
+  const normalizePath = (base, src) => {
+    const joined = `${base ? `${base}/` : ''}${src}`
+    return joined.split('/').reduce((acc, part) => {
+      if (part === '' || part === '.') return acc
+      if (part === '..') return acc.slice(0, -1)
+      return [...acc, part]
+    }, []).join('/')
+  }
+
+  const findByBasename = (src) => {
+    const base = src.split('/').pop()
+    const key = [...state.fileMap.keys()].find((k) => k.split('/').pop() === base)
+    return key ? { key, file: state.fileMap.get(key) } : null
+  }
+
+  const resolveSrc = (src) => {
+    if (/^(https?:|data:|blob:)/i.test(src)) return src
+    const mdDir = state.mdPath.includes('/')
+      ? state.mdPath.slice(0, state.mdPath.lastIndexOf('/'))
+      : ''
+    const full = normalizePath(mdDir, src)
+    const hit = state.fileMap.has(full)
+      ? { key: full, file: state.fileMap.get(full) }
+      : findByBasename(src)
+    if (!hit) return src
+    if (!state.blobUrls.has(hit.key)) state.blobUrls.set(hit.key, URL.createObjectURL(hit.file))
+    return state.blobUrls.get(hit.key)
+  }
+
+  const renderSlide = () => {
+    const slide = state.deck.slides[state.index]
+    const meta = { ...state.deck.globals, ...slide.meta }
+    stage.style.background = meta.bg || DEFAULT_BG
+    stage.style.color = meta.color || DEFAULT_COLOR
+    content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
+    indicator.textContent = `${state.index + 1} / ${state.deck.slides.length}`
+  }
+
+  const revokeBlobs = () => {
+    for (const url of state.blobUrls.values()) URL.revokeObjectURL(url)
+    state.blobUrls = new Map()
+  }
+
+  const loadDeck = (text, mdPath, fileMap) => {
+    const deck = SimpptParser.parse(text)
+    if (deck.slides.length === 0) {
+      showToast('這份 .md 解析不出任何頁面')
+      return false
+    }
+    revokeBlobs()
+    state.deck = deck
+    state.mdPath = mdPath
+    state.fileMap = fileMap
+    state.index = Math.min(state.index, deck.slides.length - 1)
+    landing.hidden = true
+    stage.hidden = false
+    document.title = `simppt — ${mdPath.split('/').pop()}`
+    renderSlide()
+    return true
+  }
+
+  const stopPolling = () => {
+    clearInterval(state.pollTimer)
+    state.pollTimer = null
+    state.fileHandle = null
+    state.dirHandle = null
+  }
+
+  const goTo = (index) => {
+    if (!state.deck) return
+    const clamped = Math.max(0, Math.min(index, state.deck.slides.length - 1))
+    if (clamped === state.index) return
+    state.index = clamped
+    renderSlide()
+  }
+
+  const pickMdPath = (fileMap) =>
+    [...fileMap.keys()].filter((k) => MD_RE.test(k)).sort()[0]
+
+  const openFromFileMap = async (fileMap) => {
+    const mdPath = pickMdPath(fileMap)
+    if (!mdPath) {
+      showToast('找不到 .md 檔')
+      return
+    }
+    const text = await fileMap.get(mdPath).text()
+    state.index = 0
+    loadDeck(text, mdPath, fileMap)
+  }
+
+  // --- 拖曳載入（webkitGetAsEntry：檔案與資料夾通吃） ---
+
+  const walkEntry = (entry, fileMap) => new Promise((resolve) => {
+    if (entry.isFile) {
+      entry.file((file) => {
+        fileMap.set(entry.fullPath.replace(/^\//, ''), file)
+        resolve()
+      }, () => resolve())
+      return
+    }
+    const reader = entry.createReader()
+    const readBatch = () => {
+      reader.readEntries(async (entries) => {
+        if (entries.length === 0) { resolve(); return }
+        await Promise.all(entries.map((e) => walkEntry(e, fileMap)))
+        readBatch()
+      }, () => resolve())
+    }
+    readBatch()
+  })
+
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault()
+    document.body.classList.add('dragover')
+  })
+  document.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget === null) document.body.classList.remove('dragover')
+  })
+  document.addEventListener('drop', async (e) => {
+    e.preventDefault()
+    document.body.classList.remove('dragover')
+    const entries = [...e.dataTransfer.items]
+      .map((item) => item.webkitGetAsEntry && item.webkitGetAsEntry())
+      .filter(Boolean)
+    if (entries.length === 0) return
+    const fileMap = new Map()
+    await Promise.all(entries.map((entry) => walkEntry(entry, fileMap)))
+    stopPolling()
+    await openFromFileMap(fileMap)
+  })
+
+  // --- File System Access API（可 polling 自動重載） ---
+
+  const walkDirHandle = async (dirHandle, prefix, fileMap) => {
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === 'file') fileMap.set(`${prefix}${entry.name}`, await entry.getFile())
+      else await walkDirHandle(entry, `${prefix}${entry.name}/`, fileMap)
+    }
+  }
+
+  const reloadFromHandles = async () => {
+    try {
+      if (state.dirHandle) {
+        const fileMap = new Map()
+        await walkDirHandle(state.dirHandle, '', fileMap)
+        const mdPath = pickMdPath(fileMap)
+        if (!mdPath) return
+        const file = fileMap.get(mdPath)
+        if (file.lastModified === state.lastModified) return
+        state.lastModified = file.lastModified
+        loadDeck(await file.text(), mdPath, fileMap)
+      } else if (state.fileHandle) {
+        const file = await state.fileHandle.getFile()
+        if (file.lastModified === state.lastModified) return
+        state.lastModified = file.lastModified
+        loadDeck(await file.text(), file.name, new Map())
+      }
+    } catch {
+      // 檔案暫時不可讀（存檔瞬間）— 下一輪 polling 再試
+    }
+  }
+
+  const startPolling = () => {
+    clearInterval(state.pollTimer)
+    state.lastModified = 0
+    state.pollTimer = setInterval(reloadFromHandles, 1000)
+    return reloadFromHandles()
+  }
+
+  openFileBtn.addEventListener('click', async () => {
+    if (!window.showOpenFilePicker) {
+      fileInput.click()
+      return
+    }
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'] } }],
+      })
+      stopPolling()
+      state.fileHandle = handle
+      state.index = 0
+      await startPolling()
+    } catch {
+      // 使用者取消
+    }
+  })
+
+  openDirBtn.addEventListener('click', async () => {
+    if (!window.showDirectoryPicker) {
+      showToast('此瀏覽器不支援開啟資料夾，請改用拖曳')
+      return
+    }
+    try {
+      const handle = await window.showDirectoryPicker()
+      stopPolling()
+      state.dirHandle = handle
+      state.index = 0
+      await startPolling()
+    } catch {
+      // 使用者取消
+    }
+  })
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0]
+    if (!file) return
+    stopPolling()
+    state.index = 0
+    loadDeck(await file.text(), file.name, new Map())
+    fileInput.value = ''
+  })
+
+  // --- 導覽 ---
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen()
+    else document.documentElement.requestFullscreen()
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (!state.deck) return
+    const key = e.key
+    if (key === 'ArrowRight' || key === 'ArrowDown' || key === ' ' || key === 'PageDown') {
+      e.preventDefault()
+      goTo(state.index + 1)
+    } else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp') {
+      e.preventDefault()
+      goTo(state.index - 1)
+    } else if (key === 'Home') {
+      goTo(0)
+    } else if (key === 'End') {
+      goTo(state.deck.slides.length - 1)
+    } else if (key === 'f' || key === 'F') {
+      toggleFullscreen()
+    } else if (key === 'p' || key === 'P') {
+      indicator.hidden = !indicator.hidden
+    }
+  })
+
+  stage.addEventListener('click', (e) => {
+    if (e.target.closest('a')) return
+    if (e.clientX < window.innerWidth / 4) goTo(state.index - 1)
+    else goTo(state.index + 1)
+  })
+})()
+</script>
+</body>
+</html>
