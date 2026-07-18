@@ -215,6 +215,17 @@
     font-size: 1.4vw; opacity: 0.55;
   }
 
+  #ink {
+    position: fixed; inset: 0; z-index: 5; pointer-events: none;
+  }
+  #stage.draw-mode #ink { pointer-events: auto; cursor: crosshair; }
+  #notes-panel {
+    position: fixed; left: 2vw; bottom: 2.5vh; max-width: 42vw;
+    background: rgba(0, 0, 0, 0.6); color: #fff;
+    padding: 12px 16px; border-radius: 10px;
+    font-size: 16px; line-height: 1.7; white-space: pre-wrap;
+    z-index: 6;
+  }
   #exit-play {
     position: fixed; top: 1.5vh; right: 1.2vw;
     font-size: 1.6vw; line-height: 1;
@@ -257,6 +268,8 @@
     <div id="slide-content" class="deck-slide slide-scope"></div>
     <div id="stage-overlay" class="slide-scope"></div>
   </div>
+  <canvas id="ink"></canvas>
+  <div id="notes-panel" hidden></div>
   <div id="indicator" hidden></div>
   <button id="exit-play" title="回編輯（Esc）">✕</button>
 </section>
@@ -411,11 +424,16 @@ const SimpptParser = (() => {
           meta: { ...defaults, ...s.meta },
           ownMeta: s.meta,
           body: s.lines.join('\n').trim(),
+          notes: s.lines
+            .map((line) => line.trim().match(/^note:\s?(.*)$/i))
+            .filter(Boolean)
+            .map((m) => m[1])
+            .join('\n'),
           raw: i,
         }
       })
       .filter((s) => opts.keepEmpty === true || s.body !== '' || Object.keys(s.ownMeta).length > 0)
-      .map(({ meta, body, raw }) => ({ meta, body, raw }))
+      .map(({ meta, body, raw, notes }) => ({ meta, body, raw, notes }))
     return { globals, slides }
   }
 
@@ -498,6 +516,12 @@ const SimpptParser = (() => {
         blocks.push({ type: 'gap', n: blankRun - 1, start: i - blankRun })
       }
       blankRun = 0
+      const note = raw.match(/^note:\s?(.*)$/i)
+      if (note) {
+        flush()
+        blocks.push({ type: 'note', text: note[1], start: i })
+        continue
+      }
       const img = raw.match(IMG_RE)
       if (img) {
         flush()
@@ -556,6 +580,7 @@ const SimpptParser = (() => {
 
   const renderMarkdown = (body, resolveSrc = (src) => src) => blocksOf(body).map((b) => {
     if (b.type === 'gap') return `<div class="gap" style="height:${b.n * 2.5}vw"></div>`
+    if (b.type === 'note') return '<div class="note-block" hidden></div>'
     if (b.type === 'img') {
       const x = parseFloat(b.attrs && b.attrs.x)
       const y = parseFloat(b.attrs && b.attrs.y)
@@ -627,6 +652,7 @@ const SimpptParser = (() => {
     dirHandle: null,
     lastModified: 0,
     pollTimer: null,
+    showNotes: false,
   }
 
   let toastTimer = null
@@ -700,6 +726,43 @@ const SimpptParser = (() => {
       : ''
   }
 
+  // --- 畫筆 ---
+
+  const ink = document.getElementById('ink')
+  const notesPanel = document.getElementById('notes-panel')
+  const inkCtx = ink.getContext('2d')
+  let drawMode = false
+  let inking = false
+
+  const clearInk = () => {
+    ink.width = window.innerWidth
+    ink.height = window.innerHeight
+  }
+
+  const setDrawMode = (on) => {
+    drawMode = on
+    stage.classList.toggle('draw-mode', on)
+  }
+
+  ink.addEventListener('mousedown', (e) => {
+    if (!drawMode) return
+    inking = true
+    inkCtx.strokeStyle = '#e94560'
+    inkCtx.lineWidth = Math.max(5, window.innerWidth * 0.005)
+    inkCtx.lineCap = 'round'
+    inkCtx.lineJoin = 'round'
+    inkCtx.beginPath()
+    inkCtx.moveTo(e.clientX, e.clientY)
+  })
+
+  window.addEventListener('mousemove', (e) => {
+    if (!inking) return
+    inkCtx.lineTo(e.clientX, e.clientY)
+    inkCtx.stroke()
+  })
+
+  window.addEventListener('mouseup', () => { inking = false })
+
   const renderSlide = () => {
     fitStage()
     const slide = state.deck.slides[state.index]
@@ -715,6 +778,9 @@ const SimpptParser = (() => {
     applyLayout(content, meta.layout)
     applyWidth(content, meta.width)
     indicator.textContent = `${state.index + 1} / ${state.deck.slides.length}`
+    clearInk()
+    notesPanel.textContent = slide.notes || ''
+    notesPanel.hidden = !state.showNotes || !slide.notes
   }
 
   const revokeBlobs = () => {
@@ -1687,7 +1753,10 @@ const SimpptParser = (() => {
       fitPreview()
       updatePreview()
     }
-    if (!stage.hidden) fitStage()
+    if (!stage.hidden) {
+      fitStage()
+      clearInk()
+    }
   })
 
   window.addEventListener('beforeunload', () => saveSession())
@@ -1714,6 +1783,7 @@ const SimpptParser = (() => {
   }
 
   const exitPlay = () => {
+    setDrawMode(false)
     const slide = state.deck && state.deck.slides[state.index]
     enterEditor(state.sourceText)
     if (!slide || typeof slide.raw !== 'number') return
@@ -1735,7 +1805,25 @@ const SimpptParser = (() => {
       return
     }
     if (key === 'Escape') {
+      if (drawMode) {
+        setDrawMode(false)
+        return
+      }
       if (!document.fullscreenElement) exitPlay()
+      return
+    }
+    if (key === 'd' || key === 'D') {
+      setDrawMode(!drawMode)
+      return
+    }
+    if (key === 'x' || key === 'X') {
+      clearInk()
+      return
+    }
+    if (key === 'n' || key === 'N') {
+      state.showNotes = !state.showNotes
+      const slide = state.deck.slides[state.index]
+      notesPanel.hidden = !state.showNotes || !slide.notes
       return
     }
     if (key === 'ArrowRight' || key === 'ArrowDown' || key === ' ' || key === 'PageDown') {
@@ -1756,6 +1844,7 @@ const SimpptParser = (() => {
   })
 
   stage.addEventListener('click', (e) => {
+    if (drawMode) return
     if (e.target.closest('a')) return
     if (e.target.closest('#exit-play')) return
     if (e.clientX < window.innerWidth / 4) goTo(state.index - 1)

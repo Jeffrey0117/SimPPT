@@ -121,6 +121,13 @@ test('empty slides after a "set" are still dropped (inherited meta does not coun
   assert.equal(deck.slides[1].meta.bg, '#fff')
 })
 
+test('note: lines become speaker notes, hidden from render', () => {
+  const deck = parse('# A\nnote: 記得講故事\nnote: 放慢')
+  assert.equal(deck.slides[0].notes, '記得講故事\n放慢')
+  const out = renderMarkdown(deck.slides[0].body)
+  assert.equal(out, '<h1>A</h1><div class="note-block" hidden></div><div class="note-block" hidden></div>')
+})
+
 test('slides carry their raw index even after empty slides are dropped', () => {
   const deck = parse('# A\n\n---\n\n---\n\n# B')
   assert.equal(deck.slides[0].raw, 0)
