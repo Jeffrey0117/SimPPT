@@ -24,6 +24,33 @@ const MIME = {
 const server = http.createServer((req, res) => {
   try {
     const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+    if (req.method === 'POST' && urlPath === '/__upload') {
+      const chunks = []
+      req.on('data', (chunk) => chunks.push(chunk))
+      req.on('end', async () => {
+        try {
+          const buf = Buffer.concat(chunks)
+          if (buf.length === 0 || buf.length > 52 * 1024 * 1024) {
+            res.writeHead(413)
+            res.end('{"status":"error","message":"file too large"}')
+            return
+          }
+          const filename = decodeURIComponent(req.headers['x-filename'] || 'paste.png')
+          const mime = req.headers['content-type'] || 'application/octet-stream'
+          const form = new FormData()
+          form.append('file', new Blob([buf], { type: mime }), filename)
+          form.append('r18', '0')
+          const upstream = await fetch('https://api.urusai.cc/v1/upload', { method: 'POST', body: form })
+          const json = await upstream.text()
+          res.writeHead(upstream.ok ? 200 : 502, { 'Content-Type': 'application/json' })
+          res.end(json)
+        } catch (err) {
+          res.writeHead(502)
+          res.end('{"status":"error","message":"upload proxy failed"}')
+        }
+      })
+      return
+    }
     if (req.method === 'POST' && urlPath === '/__save') {
       let body = ''
       req.on('data', (chunk) => { body += chunk })

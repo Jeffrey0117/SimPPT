@@ -1466,6 +1466,57 @@ const SimpptParser = (() => {
     updatePreview()
     scheduleSave()
   })
+
+  // --- 貼上圖片 → 上傳 urusai.cc → 插入 ![](url) ---
+
+  const uploadImage = async (file) => {
+    if (/^https?:$/.test(location.protocol)) {
+      const res = await fetch('/__upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-Filename': encodeURIComponent(file.name || 'paste.png'),
+        },
+        body: file,
+      })
+      if (!res.ok) throw new Error(`upload ${res.status}`)
+      return res.json()
+    }
+    const form = new FormData()
+    form.append('file', file, file.name || 'paste.png')
+    form.append('r18', '0')
+    const res = await fetch('https://api.urusai.cc/v1/upload', { method: 'POST', body: form })
+    if (!res.ok) throw new Error(`upload ${res.status}`)
+    return res.json()
+  }
+
+  edText.addEventListener('paste', async (e) => {
+    const items = (e.clipboardData && e.clipboardData.items) || []
+    const imageItem = [...items].find((item) => item.type.startsWith('image/'))
+    if (!imageItem) return
+    e.preventDefault()
+    const file = imageItem.getAsFile()
+    if (!file) return
+    const placeholder = `![上傳中…${Date.now() % 100000}]()`
+    edText.setRangeText(`\n${placeholder}\n`, edText.selectionStart, edText.selectionEnd, 'end')
+    edDirty = true
+    setStatus('圖片上傳中…')
+    updatePreview()
+    try {
+      const json = await uploadImage(file)
+      const url = json && json.data && json.data.url_direct
+      if (!url) throw new Error((json && json.message) || 'no url')
+      edText.value = edText.value.replace(placeholder, `![](${url})`)
+      setStatus('圖片已上傳 ✓', true)
+    } catch (err) {
+      edText.value = edText.value.replace(`\n${placeholder}\n`, '')
+      showToast('圖片上傳失敗，再試一次或檢查網路')
+      setStatus('未儲存變更')
+    }
+    edDirty = true
+    updatePreview()
+    scheduleSave()
+  })
   edText.addEventListener('keyup', updatePreview)
   edText.addEventListener('click', updatePreview)
 
