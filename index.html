@@ -387,16 +387,17 @@ const SimpptParser = (() => {
     }
     let defaults = {}
     const slides = rawSlides
-      .map((s) => {
+      .map((s, i) => {
         if (s.sticky) defaults = { ...defaults, ...s.meta }
         return {
           meta: { ...defaults, ...s.meta },
           ownMeta: s.meta,
           body: s.lines.join('\n').trim(),
+          raw: i,
         }
       })
       .filter((s) => opts.keepEmpty === true || s.body !== '' || Object.keys(s.ownMeta).length > 0)
-      .map(({ meta, body }) => ({ meta, body }))
+      .map(({ meta, body, raw }) => ({ meta, body, raw }))
     return { globals, slides }
   }
 
@@ -1576,14 +1577,24 @@ const SimpptParser = (() => {
   }
 
   const exitPlay = () => {
+    const slide = state.deck && state.deck.slides[state.index]
     enterEditor(state.sourceText)
+    if (!slide || typeof slide.raw !== 'number') return
+    const range = SimpptParser.slideLineRange(edText.value, slide.raw)
+    if (!range) return
+    const lines = edText.value.split('\n')
+    const offset = lines.slice(0, range.start).join('\n').length + (range.start > 0 ? 1 : 0)
+    edText.setSelectionRange(offset, offset)
+    const lineHeight = 25.5
+    edText.scrollTop = Math.max(0, range.start * lineHeight - edText.clientHeight / 3)
+    updatePreview()
   }
 
   document.addEventListener('keydown', (e) => {
     if (!editor.hidden || !state.deck || stage.hidden) return
     const key = e.key
     if (key === 'e' || key === 'E') {
-      enterEditor(state.sourceText)
+      exitPlay()
       return
     }
     if (key === 'Escape') {

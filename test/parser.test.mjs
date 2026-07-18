@@ -121,6 +121,12 @@ test('empty slides after a "set" are still dropped (inherited meta does not coun
   assert.equal(deck.slides[1].meta.bg, '#fff')
 })
 
+test('slides carry their raw index even after empty slides are dropped', () => {
+  const deck = parse('# A\n\n---\n\n---\n\n# B')
+  assert.equal(deck.slides[0].raw, 0)
+  assert.equal(deck.slides[1].raw, 2)
+})
+
 test('parse keepEmpty keeps empty slides (editor mode)', () => {
   const deck = parse('# A\n\n---\n\n---\n\n# B', { keepEmpty: true })
   assert.equal(deck.slides.length, 3)
