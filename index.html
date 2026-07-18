@@ -731,12 +731,18 @@ const SimpptParser = (() => {
         const file = fileMap.get(mdPath)
         if (file.lastModified === state.lastModified) return
         state.lastModified = file.lastModified
-        loadDeck(await file.text(), mdPath, fileMap)
+        const text = await file.text()
+        if (text === state.sourceText || edDirty) return
+        appendHistory(state.sourceText, state.mdPath)
+        loadDeck(text, mdPath, fileMap)
       } else if (state.fileHandle) {
         const file = await state.fileHandle.getFile()
         if (file.lastModified === state.lastModified) return
         state.lastModified = file.lastModified
-        loadDeck(await file.text(), file.name, new Map())
+        const text = await file.text()
+        if (text === state.sourceText || edDirty) return
+        appendHistory(state.sourceText, state.mdPath)
+        loadDeck(text, file.name, new Map())
       }
     } catch {
       // 檔案暫時不可讀（存檔瞬間）— 下一輪 polling 再試
@@ -1394,7 +1400,8 @@ const SimpptParser = (() => {
         }
         const text = await res.text()
         if (text === state.sourceText) return true
-        if (!editor.hidden) return true
+        if (!editor.hidden || edDirty) return true
+        appendHistory(state.sourceText, state.mdPath)
         loadDeck(text, deckParam, new Map(), baseUrl)
         state.deckUrl = deckParam
         return true
