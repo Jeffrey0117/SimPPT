@@ -114,6 +114,7 @@
     position: absolute; margin: 0;
     max-width: 94%; text-align: left;
   }
+  .gap { flex: 0 0 auto; width: 100%; pointer-events: none; }
   .block-selected { outline: 2px solid #6c9ef8; outline-offset: 0.3vw; }
   #guide-v, #guide-h { position: absolute; pointer-events: none; z-index: 4; }
   #guide-v { top: 0; bottom: 0; width: 0; border-left: 0.15vw dashed #e94560; }
@@ -444,13 +445,22 @@ const SimpptParser = (() => {
     const lines = body.replace(/\r\n?/g, '\n').split('\n')
     const blocks = []
     let cur = null
+    let blankRun = 0
     const flush = () => {
       if (cur) blocks.push(cur)
       cur = null
     }
     for (let i = 0; i < lines.length; i += 1) {
       const raw = lines[i].trim()
-      if (raw === '') { flush(); continue }
+      if (raw === '') {
+        flush()
+        blankRun += 1
+        continue
+      }
+      if (blankRun > 1 && blocks.length > 0) {
+        blocks.push({ type: 'gap', n: blankRun - 1, start: i - blankRun })
+      }
+      blankRun = 0
       const img = raw.match(IMG_RE)
       if (img) {
         flush()
@@ -508,6 +518,7 @@ const SimpptParser = (() => {
   }
 
   const renderMarkdown = (body, resolveSrc = (src) => src) => blocksOf(body).map((b) => {
+    if (b.type === 'gap') return `<div class="gap" style="height:${b.n * 2.5}vw"></div>`
     if (b.type === 'img') {
       const x = parseFloat(b.attrs && b.attrs.x)
       const y = parseFloat(b.attrs && b.attrs.y)

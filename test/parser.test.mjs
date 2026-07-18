@@ -181,6 +181,18 @@ test('c= sets block text color', () => {
   assert.equal(renderMarkdown('hi {c=#ff0000}'), '<p style="color:#ff0000">hi</p>')
 })
 
+test('extra blank lines become vertical gap spacers', () => {
+  assert.equal(renderMarkdown('a\n\nb'), '<p>a</p><p>b</p>')
+  assert.equal(
+    renderMarkdown('a\n\n\nb'),
+    '<p>a</p><div class="gap" style="height:2.5vw"></div><p>b</p>',
+  )
+  assert.equal(
+    renderMarkdown('a\n\n\n\n\nb'),
+    '<p>a</p><div class="gap" style="height:7.5vw"></div><p>b</p>',
+  )
+})
+
 test('b=1 sets block bold', () => {
   assert.equal(renderMarkdown('hi {b=1}'), '<p style="font-weight:700">hi</p>')
 })
