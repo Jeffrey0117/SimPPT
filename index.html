@@ -951,14 +951,12 @@ const SimpptParser = (() => {
     fig.appendChild(handle)
   }
 
-  const updatePreview = () => {
+  const updatePreview = (followCursor = false) => {
     const text = edText.value
     const deck = SimpptParser.parse(text, { keepEmpty: true })
-    const idx = Math.min(
-      SimpptParser.slideIndexAt(text, edText.selectionStart),
-      Math.max(0, deck.slides.length - 1),
-    )
-    previewIdx = idx
+    if (followCursor) previewIdx = SimpptParser.slideIndexAt(text, edText.selectionStart)
+    previewIdx = Math.min(previewIdx, Math.max(0, deck.slides.length - 1))
+    const idx = previewIdx
     const slide = deck.slides[idx] || { meta: {}, body: '' }
     const meta = { ...deck.globals, ...slide.meta }
     edFrame.style.background = meta.bg || DEFAULT_BG
@@ -987,7 +985,7 @@ const SimpptParser = (() => {
     edDirty = false
     setStatus('Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中按 E 回編輯')
     fitPreview()
-    updatePreview()
+    updatePreview(true)
     edText.focus()
     scheduleSave()
   }
@@ -999,10 +997,8 @@ const SimpptParser = (() => {
       showToast('目前內容解析不出任何頁面')
       return
     }
-    state.index = Math.min(
-      SimpptParser.slideIndexAt(text, edText.selectionStart),
-      deck.slides.length - 1,
-    )
+    const target = deck.slides.findIndex((s) => s.raw >= previewIdx)
+    state.index = target >= 0 ? target : deck.slides.length - 1
     loadDeck(text, state.mdPath || '未命名.md', state.fileMap)
     if (state.fileHandle || state.dirHandle) startHandleWatch()
   }
@@ -1491,7 +1487,7 @@ const SimpptParser = (() => {
   edText.addEventListener('input', () => {
     edDirty = true
     setStatus('未儲存變更')
-    updatePreview()
+    updatePreview(true)
     scheduleSave()
   })
 
@@ -1529,7 +1525,7 @@ const SimpptParser = (() => {
     edText.setRangeText(`\n${placeholder}\n`, edText.selectionStart, edText.selectionEnd, 'end')
     edDirty = true
     setStatus('圖片上傳中…')
-    updatePreview()
+    updatePreview(true)
     try {
       const json = await uploadImage(file)
       const url = json && json.data && json.data.url_direct
@@ -1542,11 +1538,11 @@ const SimpptParser = (() => {
       setStatus('未儲存變更')
     }
     edDirty = true
-    updatePreview()
+    updatePreview(true)
     scheduleSave()
   })
-  edText.addEventListener('keyup', updatePreview)
-  edText.addEventListener('click', updatePreview)
+  edText.addEventListener('keyup', () => updatePreview(true))
+  edText.addEventListener('click', () => updatePreview(true))
 
   window.addEventListener('resize', () => {
     if (!editor.hidden) {
@@ -1587,7 +1583,7 @@ const SimpptParser = (() => {
     edText.setSelectionRange(offset, offset)
     const lineHeight = 25.5
     edText.scrollTop = Math.max(0, range.start * lineHeight - edText.clientHeight / 3)
-    updatePreview()
+    updatePreview(true)
   }
 
   document.addEventListener('keydown', (e) => {
@@ -1737,7 +1733,7 @@ const SimpptParser = (() => {
         if (typeof s.cursor === 'number') {
           edText.setSelectionRange(s.cursor, s.cursor)
           edText.scrollTop = s.scroll || 0
-          updatePreview()
+          updatePreview(true)
         }
         if (s.dirty) {
           edDirty = true
