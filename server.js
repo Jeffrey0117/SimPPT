@@ -24,6 +24,28 @@ const MIME = {
 const server = http.createServer((req, res) => {
   try {
     const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+    if (req.method === 'POST' && urlPath === '/__save') {
+      let body = ''
+      req.on('data', (chunk) => { body += chunk })
+      req.on('end', () => {
+        try {
+          const { path: rel, text } = JSON.parse(body)
+          const full = path.resolve(ROOT, rel)
+          if (!full.startsWith(ROOT + path.sep) || !/\.(md|markdown)$/i.test(full) || typeof text !== 'string') {
+            res.writeHead(403)
+            res.end('Forbidden')
+            return
+          }
+          fs.writeFileSync(full, text, 'utf8')
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end('{"ok":true}')
+        } catch (err) {
+          res.writeHead(400)
+          res.end('Bad request')
+        }
+      })
+      return
+    }
     const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '')
     const full = path.resolve(ROOT, rel)
     if (!full.startsWith(ROOT + path.sep)) {

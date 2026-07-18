@@ -210,6 +210,7 @@
     <button id="open-sample">看範例</button>
     <button id="open-file">開啟檔案</button>
     <button id="open-dir">開啟資料夾</button>
+    <button id="open-history" title="編輯內容每分鐘自動備份，最多 20 份；點一次載入最新，再點往回翻">歷史備份</button>
   </div>
   <p class="keys">
     <kbd>←</kbd> <kbd>→</kbd> 翻頁 · <kbd>F</kbd> 全螢幕 · <kbd>Esc</kbd> 結束播放 ·
@@ -528,6 +529,7 @@ const SimpptParser = (() => {
     mdPath: '',
     sourceText: '',
     deckBaseUrl: '',
+    deckUrl: '',
     fileMap: new Map(),
     blobUrls: new Map(),
     fileHandle: null,
@@ -643,6 +645,7 @@ const SimpptParser = (() => {
     stopTimer()
     state.fileHandle = null
     state.dirHandle = null
+    state.deckUrl = ''
   }
 
   const goTo = (index) => {
@@ -944,10 +947,20 @@ const SimpptParser = (() => {
   const saveDeck = async () => {
     const text = edText.value
     try {
-      if (state.fileHandle && await ensureRW(state.fileHandle)) {
+      if (state.deckUrl) {
+        const res = await fetch('/__save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: state.deckUrl, text }),
+        })
+        if (!res.ok) throw new Error(`server save ${res.status}`)
+      } else if (state.fileHandle && await ensureRW(state.fileHandle)) {
         await writeTo(state.fileHandle, text)
+        state.lastModified = (await state.fileHandle.getFile()).lastModified
       } else if (state.dirHandle && state.mdPath && await ensureRW(state.dirHandle)) {
-        await writeTo(await handleForPath(state.dirHandle, state.mdPath), text)
+        const handle = await handleForPath(state.dirHandle, state.mdPath)
+        await writeTo(handle, text)
+        state.lastModified = (await handle.getFile()).lastModified
       } else if (window.showSaveFilePicker) {
         const handle = await window.showSaveFilePicker({
           suggestedName: (state.mdPath || '簡報.md').split('/').pop(),
@@ -1111,6 +1124,28 @@ const SimpptParser = (() => {
     state.sourceText = ''
     enterEditor(NEW_DECK_TEMPLATE)
   })
+
+  let historyCursor = -1
+  document.getElementById('open-history').addEventListener('click', () => {
+    let hist = []
+    try {
+      hist = JSON.parse(localStorage.getItem('simppt-history') || '[]')
+    } catch {
+      hist = []
+    }
+    if (hist.length === 0) {
+      showToast('還沒有歷史備份（編輯時會自動累積）')
+      return
+    }
+    historyCursor = (historyCursor + 1) % hist.length
+    const snap = hist[hist.length - 1 - historyCursor]
+    stopPolling()
+    state.mdPath = snap.mdPath || ''
+    state.fileMap = new Map()
+    enterEditor(snap.text)
+    edDirty = true
+    setStatus(`歷史備份 ${historyCursor + 1}/${hist.length} — ${new Date(snap.t).toLocaleString()}（回首頁再按可看更舊的）`)
+  })
   edPlayBtn.addEventListener('click', playFromEditor)
   edSaveBtn.addEventListener('click', saveDeck)
   document.getElementById('ed-reset').addEventListener('click', resetSlideLayout)
@@ -1228,9 +1263,26 @@ const SimpptParser = (() => {
     })
   }
 
+  const appendHistory = (text, mdPath, auto = false) => {
+    if (!text || !text.trim()) return
+    try {
+      const hist = JSON.parse(localStorage.getItem('simppt-history') || '[]')
+      const last = hist[hist.length - 1]
+      if (last && last.text === text) return
+      if (auto && last && Date.now() - last.t < 60000) return
+      localStorage.setItem('simppt-history', JSON.stringify(
+        [...hist, { t: Date.now(), mdPath, text }].slice(-20),
+      ))
+    } catch {
+      // 空間不足就算了 — 備份是保險不是主體
+    }
+  }
+
   const saveSession = () => {
+    const view = !editor.hidden ? 'editor' : (!stage.hidden ? 'play' : 'landing')
+    if (view === 'play' && state.deckUrl) return
     const session = {
-      view: !editor.hidden ? 'editor' : (!stage.hidden ? 'play' : 'landing'),
+      view,
       text: !editor.hidden ? edText.value : state.sourceText,
       mdPath: state.mdPath,
       index: state.index,
@@ -1241,6 +1293,7 @@ const SimpptParser = (() => {
     } catch {
       // localStorage 滿了或被擋 — 略過
     }
+    if (view === 'editor') appendHistory(session.text, session.mdPath, true)
     idbSet('fileHandle', state.fileHandle || null).catch(() => {})
     idbSet('dirHandle', state.dirHandle || null).catch(() => {})
   }
@@ -1318,22 +1371,35 @@ const SimpptParser = (() => {
         if (text === state.sourceText) return true
         if (!editor.hidden) return true
         loadDeck(text, deckParam, new Map(), baseUrl)
+        state.deckUrl = deckParam
         return true
       } catch {
         return false
       }
     }
     if (await load()) {
-      stopPolling()
+      stopTimer()
       state.pollTimer = setInterval(load, 1000)
     }
     return true
   }
 
   const boot = async () => {
-    const hasDeckParam = /^https?:$/.test(location.protocol)
-      && new URLSearchParams(location.search).get('deck')
-    if (hasDeckParam) {
+    const deckParam = /^https?:$/.test(location.protocol)
+      ? new URLSearchParams(location.search).get('deck')
+      : null
+    if (deckParam) {
+      try {
+        const s = JSON.parse(localStorage.getItem('simppt-session') || 'null')
+        if (s && s.dirty && s.view === 'editor' && s.mdPath === deckParam && s.text) {
+          await restoreSession()
+          state.deckUrl = deckParam
+          setStatus('已還原重整前未儲存的編輯 — Ctrl+S 會直接寫回檔案')
+          return
+        }
+      } catch {
+        // session 壞掉就走正常載入
+      }
       await initFromQuery()
       return
     }
