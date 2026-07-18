@@ -704,9 +704,11 @@ const SimpptParser = (() => {
     fitStage()
     const slide = state.deck.slides[state.index]
     const meta = { ...state.deck.globals, ...slide.meta }
-    stage.style.background = meta.bg || DEFAULT_BG
+    stage.style.background = '#000'
     stage.style.color = meta.color || DEFAULT_COLOR
-    stage.style.setProperty('--accent', meta.accent || 'inherit')
+    stageFrame.style.background = meta.bg || DEFAULT_BG
+    stageFrame.style.color = meta.color || DEFAULT_COLOR
+    stageFrame.style.setProperty('--accent', meta.accent || 'inherit')
     content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
     stageOverlay.innerHTML = ''
     for (const el of [...content.querySelectorAll('.img-abs, .txt-abs')]) stageOverlay.appendChild(el)
