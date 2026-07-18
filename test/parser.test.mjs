@@ -170,7 +170,15 @@ test('ordered list starting at 2 keeps its number via start attr', () => {
 
 test('heading with {x= y= s=} renders absolutely positioned + scaled', () => {
   const out = renderMarkdown('# T {x=5 y=6 s=120}')
-  assert.equal(out, '<h1 class="txt-abs" style="left:5%;top:6%;transform:scale(1.2)">T</h1>')
+  assert.equal(out, '<h1 class="txt-abs" style="left:5%;top:6%;--ts:1.2">T</h1>')
+})
+
+test('s= alone scales a flow block without positioning', () => {
+  assert.equal(renderMarkdown('# T {s=120}'), '<h1 style="--ts:1.2">T</h1>')
+})
+
+test('c= sets block text color', () => {
+  assert.equal(renderMarkdown('hi {c=#ff0000}'), '<p style="color:#ff0000">hi</p>')
 })
 
 test('paragraph with {x= y=} without s has no transform', () => {
