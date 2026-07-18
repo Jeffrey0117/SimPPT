@@ -218,6 +218,7 @@
     display: flex; align-items: center; justify-content: center;
   }
   #ed-pageinfo { font-size: 12.5px; color: #77777f; }
+  #ed-strip { display: flex; gap: 8px; justify-content: center; }
 
   #indicator {
     position: fixed; right: 2vw; bottom: 2.5vh;
@@ -398,6 +399,7 @@
       <div id="ed-viewport">
         <div id="ed-frame"><div id="ed-content" class="deck-slide slide-scope"></div><div id="ed-overlay" class="slide-scope"></div><div id="guide-v" hidden></div><div id="guide-h" hidden></div></div>
       </div>
+      <div id="ed-strip"></div>
       <div id="ed-pageinfo"></div>
     </div>
   </div>
@@ -987,6 +989,37 @@ const SimpptParser = (() => {
 
   const stageStrip = document.getElementById('stage-strip')
 
+  const makeThumb = (deck, i, wPx, current, onClick) => {
+    const thumb = document.createElement('div')
+    thumb.className = `st-thumb${current ? ' current' : ''}`
+    thumb.style.width = `${wPx}px`
+    thumb.style.height = `${(wPx * 9) / 16}px`
+    const frame = document.createElement('div')
+    frame.className = 'pr-frame'
+    frame.style.transform = `scale(${wPx / window.innerWidth})`
+    const thumbContent = document.createElement('div')
+    thumbContent.className = 'deck-slide slide-scope'
+    const thumbOverlay = document.createElement('div')
+    thumbOverlay.className = 'slide-scope pr-overlay'
+    frame.append(thumbContent, thumbOverlay)
+    const num = document.createElement('span')
+    num.className = 'st-num'
+    num.textContent = String(i + 1)
+    thumb.append(frame, num)
+    thumb.addEventListener('click', (e) => {
+      e.stopPropagation()
+      onClick(i)
+    })
+    renderInto(frame, thumbContent, thumbOverlay, deck, i)
+    return thumb
+  }
+
+  const stripWindow = (total, center) => {
+    const count = Math.min(5, total)
+    const from = Math.max(0, Math.min(center - 2, total - count))
+    return { from, count }
+  }
+
   const updateStageStrip = () => {
     if (!state.deck || stage.hidden || ROLE === 'stage' || document.fullscreenElement) {
       stageStrip.hidden = true
@@ -1002,32 +1035,9 @@ const SimpptParser = (() => {
     }
     stageStrip.hidden = false
     stageStrip.innerHTML = ''
-    const total = state.deck.slides.length
-    const count = Math.min(5, total)
-    const from = Math.max(0, Math.min(state.index - 2, total - count))
+    const { from, count } = stripWindow(state.deck.slides.length, state.index)
     for (let i = from; i < from + count; i += 1) {
-      const thumb = document.createElement('div')
-      thumb.className = `st-thumb${i === state.index ? ' current' : ''}`
-      thumb.style.width = `${(h * 16) / 9}px`
-      thumb.style.height = `${h}px`
-      const frame = document.createElement('div')
-      frame.className = 'pr-frame'
-      frame.style.transform = `scale(${h / (window.innerWidth * 0.5625)})`
-      const thumbContent = document.createElement('div')
-      thumbContent.className = 'deck-slide slide-scope'
-      const thumbOverlay = document.createElement('div')
-      thumbOverlay.className = 'slide-scope pr-overlay'
-      frame.append(thumbContent, thumbOverlay)
-      const num = document.createElement('span')
-      num.className = 'st-num'
-      num.textContent = String(i + 1)
-      thumb.append(frame, num)
-      thumb.addEventListener('click', (e) => {
-        e.stopPropagation()
-        goTo(i)
-      })
-      stageStrip.append(thumb)
-      renderInto(frame, thumbContent, thumbOverlay, state.deck, i)
+      stageStrip.append(makeThumb(state.deck, i, (h * 16) / 9, i === state.index, goTo))
     }
   }
 
@@ -1325,8 +1335,35 @@ const SimpptParser = (() => {
     applyWidth(edContent, meta.width)
     appendCountdown(edContent, meta, false)
     edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
+    updateEdStrip(deck)
     selectedKs = new Set([...selectedKs].filter((k) => previewBlocks[k]))
     applySelectionClasses()
+  }
+
+  const edStrip = document.getElementById('ed-strip')
+
+  const jumpEditorToSlide = (rawIdx) => {
+    const range = SimpptParser.slideLineRange(edText.value, rawIdx)
+    if (!range) return
+    const lines = edText.value.split('\n')
+    const offset = lines.slice(0, range.start).join('\n').length + (range.start > 0 ? 1 : 0)
+    edText.setSelectionRange(offset, offset)
+    edText.scrollTop = Math.max(0, range.start * 25.5 - edText.clientHeight / 3)
+    updatePreview(true)
+  }
+
+  const updateEdStrip = (deck) => {
+    const key = `${previewIdx}:${deck.slides.length}:${edPreviewBox.clientWidth}`
+    if (edStrip.dataset.key === key) return
+    edStrip.dataset.key = key
+    edStrip.innerHTML = ''
+    const total = deck.slides.length
+    if (total < 2) return
+    const { from, count } = stripWindow(total, previewIdx)
+    const wPx = Math.min(150, (edPreviewBox.clientWidth - 32 - (count - 1) * 8) / count)
+    for (let i = from; i < from + count; i += 1) {
+      edStrip.append(makeThumb(deck, i, wPx, i === previewIdx, jumpEditorToSlide))
+    }
   }
 
   const enterEditor = (text) => {
@@ -2041,15 +2078,7 @@ const SimpptParser = (() => {
     setDrawMode(false)
     const slide = state.deck && state.deck.slides[state.index]
     enterEditor(state.sourceText)
-    if (!slide || typeof slide.raw !== 'number') return
-    const range = SimpptParser.slideLineRange(edText.value, slide.raw)
-    if (!range) return
-    const lines = edText.value.split('\n')
-    const offset = lines.slice(0, range.start).join('\n').length + (range.start > 0 ? 1 : 0)
-    edText.setSelectionRange(offset, offset)
-    const lineHeight = 25.5
-    edText.scrollTop = Math.max(0, range.start * lineHeight - edText.clientHeight / 3)
-    updatePreview(true)
+    if (slide && typeof slide.raw === 'number') jumpEditorToSlide(slide.raw)
   }
 
   document.addEventListener('keydown', (e) => {
