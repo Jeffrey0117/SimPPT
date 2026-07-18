@@ -121,6 +121,12 @@
     max-width: 94%; text-align: left;
   }
   .gap { flex: 0 0 auto; width: 100%; pointer-events: none; }
+  .countdown {
+    font-size: 11vw; font-weight: 700; line-height: 1.1;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.3vw;
+  }
+  .countdown.done { animation: cd-blink 1s step-end infinite; }
+  @keyframes cd-blink { 50% { opacity: 0.25; } }
   .block-selected { outline: 2px solid #6c9ef8; outline-offset: -2px; }
   #guide-v, #guide-h { position: absolute; pointer-events: none; z-index: 4; }
   #guide-v { top: 0; bottom: 0; width: 0; border-left: 0.15vw dashed #e94560; }
@@ -244,6 +250,11 @@
     flex: 0 0 56%; display: flex; flex-direction: column;
     gap: 8px; min-width: 0;
   }
+  #pr-strip { display: flex; gap: 12px; }
+  .pr-thumb { display: flex; flex-direction: column; gap: 4px; }
+  .pr-thumb .pr-viewport { cursor: pointer; }
+  .pr-thumb .pr-viewport:hover { box-shadow: 0 0 0 2px #6c9ef8; }
+  #pr-slider { width: 100%; accent-color: #6c9ef8; margin-top: 6px; cursor: pointer; }
   .pr-label { font-size: 13px; color: #77777f; }
   .pr-viewport {
     overflow: hidden; border-radius: 6px;
@@ -382,13 +393,9 @@
         <div class="slide-scope pr-overlay" id="pr-cur-overlay"></div>
       </div>
     </div>
-    <div class="pr-label">下一頁</div>
-    <div class="pr-viewport" id="pr-next-vp">
-      <div class="pr-frame" id="pr-next-frame">
-        <div class="deck-slide slide-scope" id="pr-next-content"></div>
-        <div class="slide-scope pr-overlay" id="pr-next-overlay"></div>
-      </div>
-    </div>
+    <div class="pr-label">接下來（點縮圖直接跳）</div>
+    <div id="pr-strip"></div>
+    <input type="range" id="pr-slider" min="1" max="1" value="1" title="拉動跳頁">
   </div>
   <div id="pr-right">
     <div id="pr-topline"><span id="pr-timer">00:00</span><span id="pr-page"></span></div>
@@ -859,8 +866,49 @@ const SimpptParser = (() => {
 
   window.addEventListener('mouseup', () => { inking = false })
 
+  // --- 倒數頁：--- countdown=3:00 ---
+
+  let countdownId = null
+
+  const parseCountdown = (value) => {
+    if (!value) return null
+    const mmss = String(value).match(/^(\d+):(\d{1,2})$/)
+    if (mmss) return parseInt(mmss[1], 10) * 60 + parseInt(mmss[2], 10)
+    const n = parseInt(value, 10)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+
+  const fmtMMSS = (sec) => {
+    const mm = String(Math.floor(sec / 60)).padStart(2, '0')
+    const ss = String(sec % 60).padStart(2, '0')
+    return `${mm}:${ss}`
+  }
+
+  const appendCountdown = (container, meta, live) => {
+    const secs = parseCountdown(meta.countdown)
+    if (!secs) return
+    const el = document.createElement('div')
+    el.className = 'countdown'
+    el.textContent = fmtMMSS(secs)
+    container.appendChild(el)
+    if (!live) return
+    let remain = secs
+    clearInterval(countdownId)
+    countdownId = setInterval(() => {
+      remain -= 1
+      if (remain <= 0) {
+        el.textContent = '00:00'
+        el.classList.add('done')
+        clearInterval(countdownId)
+        return
+      }
+      el.textContent = fmtMMSS(remain)
+    }, 1000)
+  }
+
   const renderSlide = () => {
     fitStage()
+    clearInterval(countdownId)
     const slide = state.deck.slides[state.index]
     const meta = { ...state.deck.globals, ...slide.meta }
     stage.style.background = '#000'
@@ -873,6 +921,7 @@ const SimpptParser = (() => {
     for (const el of [...content.querySelectorAll('.img-abs, .txt-abs')]) stageOverlay.appendChild(el)
     applyLayout(content, meta.layout)
     applyWidth(content, meta.width)
+    appendCountdown(content, meta, true)
     indicator.textContent = `${state.index + 1} / ${state.deck.slides.length}`
     clearInk()
     notesPanel.textContent = slide.notes || ''
@@ -1167,6 +1216,7 @@ const SimpptParser = (() => {
     }
     applyLayout(edContent, meta.layout)
     applyWidth(edContent, meta.width)
+    appendCountdown(edContent, meta, false)
     edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
     selectedKs = new Set([...selectedKs].filter((k) => previewBlocks[k]))
     applySelectionClasses()
@@ -1879,6 +1929,7 @@ const SimpptParser = (() => {
   }
 
   const exitPlay = () => {
+    clearInterval(countdownId)
     setDrawMode(false)
     const slide = state.deck && state.deck.slides[state.index]
     enterEditor(state.sourceText)
@@ -1957,10 +2008,8 @@ const SimpptParser = (() => {
   const prCurFrame = document.getElementById('pr-cur-frame')
   const prCurContent = document.getElementById('pr-cur-content')
   const prCurOverlay = document.getElementById('pr-cur-overlay')
-  const prNextVp = document.getElementById('pr-next-vp')
-  const prNextFrame = document.getElementById('pr-next-frame')
-  const prNextContent = document.getElementById('pr-next-content')
-  const prNextOverlay = document.getElementById('pr-next-overlay')
+  const prStrip = document.getElementById('pr-strip')
+  const prSlider = document.getElementById('pr-slider')
   const prTimer = document.getElementById('pr-timer')
   const prPage = document.getElementById('pr-page')
   const prNotes = document.getElementById('pr-notes')
@@ -1989,7 +2038,29 @@ const SimpptParser = (() => {
     for (const el of [...content.querySelectorAll('.img-abs, .txt-abs')]) overlay.appendChild(el)
     applyLayout(content, meta.layout)
     applyWidth(content, meta.width)
+    appendCountdown(content, meta, false)
   }
+
+  const prThumbs = [1, 2, 3].map((off) => {
+    const wrap = document.createElement('div')
+    wrap.className = 'pr-thumb'
+    const label = document.createElement('div')
+    label.className = 'pr-label'
+    const viewport = document.createElement('div')
+    viewport.className = 'pr-viewport'
+    const frame = document.createElement('div')
+    frame.className = 'pr-frame'
+    const content = document.createElement('div')
+    content.className = 'deck-slide slide-scope'
+    const overlay = document.createElement('div')
+    overlay.className = 'slide-scope pr-overlay'
+    frame.append(content, overlay)
+    viewport.append(frame)
+    wrap.append(label, viewport)
+    viewport.addEventListener('click', () => prGoTo(pIdx + off))
+    prStrip.append(wrap)
+    return { off, wrap, label, viewport, frame, content, overlay }
+  })
 
   const fitFrameTo = (viewport, frame, maxW, maxH) => {
     const scale = Math.max(0.02, Math.min(maxW / window.innerWidth, maxH / (window.innerWidth * 0.5625)))
@@ -2000,16 +2071,28 @@ const SimpptParser = (() => {
 
   const fitPresenter = () => {
     const availW = presenter.clientWidth * 0.56 - 36
-    const availH = presenter.clientHeight - 90
-    fitFrameTo(prCurVp, prCurFrame, availW, availH * 0.62)
-    fitFrameTo(prNextVp, prNextFrame, availW * 0.55, availH * 0.3)
+    const availH = presenter.clientHeight - 130
+    fitFrameTo(prCurVp, prCurFrame, availW, availH * 0.66)
+    for (const t of prThumbs) {
+      fitFrameTo(t.viewport, t.frame, (availW - 24) / 3, availH * 0.26)
+    }
   }
 
   const renderPresenter = () => {
     const slide = state.deck.slides[pIdx]
+    const total = state.deck.slides.length
     renderInto(prCurFrame, prCurContent, prCurOverlay, state.deck, pIdx)
-    renderInto(prNextFrame, prNextContent, prNextOverlay, state.deck, pIdx + 1)
-    prPage.textContent = `${pIdx + 1} / ${state.deck.slides.length}`
+    for (const t of prThumbs) {
+      const idx = pIdx + t.off
+      t.wrap.style.visibility = idx < total ? 'visible' : 'hidden'
+      if (idx < total) {
+        t.label.textContent = `第 ${idx + 1} 頁`
+        renderInto(t.frame, t.content, t.overlay, state.deck, idx)
+      }
+    }
+    prPage.textContent = `${pIdx + 1} / ${total}`
+    prSlider.max = String(total)
+    prSlider.value = String(pIdx + 1)
     prNotes.textContent = (slide && slide.notes) || '（這頁沒有 note: 演講稿）'
   }
 
@@ -2094,6 +2177,7 @@ const SimpptParser = (() => {
   document.getElementById('ed-present').addEventListener('click', startPresenter)
   document.getElementById('pr-prev').addEventListener('click', () => prGoTo(pIdx - 1))
   document.getElementById('pr-next').addEventListener('click', () => prGoTo(pIdx + 1))
+  prSlider.addEventListener('input', () => prGoTo(parseInt(prSlider.value, 10) - 1))
   document.getElementById('pr-exit').addEventListener('click', exitPresenter)
   prDrawBtn.addEventListener('click', () => setRemoteDraw(!prDrawOn))
   document.getElementById('pr-clearink').addEventListener('click', () => {
