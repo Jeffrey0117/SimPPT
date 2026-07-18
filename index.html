@@ -59,6 +59,11 @@
     display: flex; align-items: center; justify-content: center;
     user-select: none;
   }
+  #stage-frame {
+    position: relative; flex: 0 0 auto;
+    width: 100vw; height: 56.25vw;
+    display: flex; align-items: center; justify-content: center;
+  }
   .deck-slide {
     max-width: var(--cw, 84vw); max-height: 49.5vw;
     display: flex; flex-direction: column;
@@ -243,8 +248,10 @@
 </main>
 
 <section id="stage" hidden>
-  <div id="slide-content" class="deck-slide slide-scope"></div>
-  <div id="stage-overlay" class="slide-scope"></div>
+  <div id="stage-frame">
+    <div id="slide-content" class="deck-slide slide-scope"></div>
+    <div id="stage-overlay" class="slide-scope"></div>
+  </div>
   <div id="indicator" hidden></div>
   <button id="exit-play" title="回編輯（Esc）">✕</button>
 </section>
@@ -549,6 +556,7 @@ const SimpptParser = (() => {
 
   const landing = document.getElementById('landing')
   const stage = document.getElementById('stage')
+  const stageFrame = document.getElementById('stage-frame')
   const stageOverlay = document.getElementById('stage-overlay')
   const content = document.getElementById('slide-content')
   const indicator = document.getElementById('indicator')
@@ -654,7 +662,15 @@ const SimpptParser = (() => {
     container.appendChild(row)
   }
 
+  const fitStage = () => {
+    const target = window.innerWidth * 0.5625
+    stageFrame.style.transform = window.innerHeight < target
+      ? `scale(${window.innerHeight / target})`
+      : ''
+  }
+
   const renderSlide = () => {
+    fitStage()
     const slide = state.deck.slides[state.index]
     const meta = { ...state.deck.globals, ...slide.meta }
     stage.style.background = meta.bg || DEFAULT_BG
@@ -1532,8 +1548,11 @@ const SimpptParser = (() => {
   edText.addEventListener('click', updatePreview)
 
   window.addEventListener('resize', () => {
-    if (!editor.hidden) fitPreview()
-    if (!editor.hidden) updatePreview()
+    if (!editor.hidden) {
+      fitPreview()
+      updatePreview()
+    }
+    if (!stage.hidden) fitStage()
   })
 
   window.addEventListener('beforeunload', () => saveSession())
