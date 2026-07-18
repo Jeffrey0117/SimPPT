@@ -252,6 +252,7 @@
   <div id="editor-bar">
     <button id="ed-play">▶ 播放</button>
     <button id="ed-save">儲存 .md</button>
+    <button id="ed-distribute" title="把此頁所有拖曳過的區塊上下等距排列（保持第一塊和最後一塊位置）">等距排列</button>
     <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
     <button id="ed-home">首頁</button>
     <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
@@ -260,6 +261,7 @@
     <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
     <div id="ed-preview">
       <div id="ed-tools" hidden>
+        <button data-act="bold" title="加粗整塊"><strong>B</strong></button>
         <button data-act="smaller" title="縮小字級">A−</button>
         <button data-act="bigger" title="放大字級">A＋</button>
         <span class="swatch" data-c="#ffffff" style="background:#ffffff"></span>
@@ -500,6 +502,7 @@ const SimpptParser = (() => {
     if (abs) styles.push(`left:${x}%`, `top:${y}%`)
     if (Number.isFinite(s) && s !== 100) styles.push(`--ts:${parseFloat((s / 100).toFixed(3))}`)
     if (attrs.c && /^[#\w(),.%\s-]+$/.test(attrs.c)) styles.push(`color:${attrs.c}`)
+    if (attrs.b === '1' || attrs.b === 'true') styles.push('font-weight:700')
     if (styles.length === 0) return ''
     return `${abs ? ' class="txt-abs"' : ''} style="${styles.join(';')}"`
   }
@@ -1095,7 +1098,7 @@ const SimpptParser = (() => {
     scheduleSave()
   }
 
-  const ATTR_ORDER = ['x', 'y', 'w', 's', 'c']
+  const ATTR_ORDER = ['x', 'y', 'w', 's', 'c', 'b']
 
   const serializeAttrs = (attrs) => {
     if (!attrs) return ''
@@ -1131,6 +1134,43 @@ const SimpptParser = (() => {
     const next = rewriteBlockLine(ctx.lines[li], merged)
     if (ctx.lines[li] === next) return
     setEditorText([...ctx.lines.slice(0, li), next, ...ctx.lines.slice(li + 1)])
+  }
+
+  const distributeVertically = () => {
+    const ctx = currentSlideLines()
+    if (!ctx) return
+    const body = ctx.lines.slice(ctx.range.start, ctx.range.end).join('\n').trim()
+    const blocks = SimpptParser.blocksOf(body)
+    const frameRect = edFrame.getBoundingClientRect()
+    const items = previewBlocks
+      .map((el, k) => ({ el, k }))
+      .filter(({ el }) => el.classList.contains('txt-abs') || el.classList.contains('img-abs'))
+      .map(({ el, k }) => ({
+        k,
+        top: parseFloat(el.style.top) || 0,
+        h: (el.getBoundingClientRect().height / frameRect.height) * 100,
+      }))
+      .sort((a, b) => a.top - b.top)
+    if (items.length < 3) {
+      showToast('至少要三個拖曳過的區塊才能等距排列')
+      return
+    }
+    const first = items[0]
+    const last = items[items.length - 1]
+    const span = (last.top + last.h) - first.top
+    const sumH = items.reduce((acc, it) => acc + it.h, 0)
+    const gap = (span - sumH) / (items.length - 1)
+    const lines = [...ctx.lines]
+    let cursor = first.top
+    for (const it of items) {
+      const block = blocks[it.k]
+      if (block) {
+        const li = ctx.lead + block.start
+        lines[li] = rewriteBlockLine(lines[li], { ...(block.attrs || {}), y: cursor.toFixed(1) })
+      }
+      cursor += it.h + gap
+    }
+    setEditorText(lines)
   }
 
   const resetSlideLayout = () => {
@@ -1325,6 +1365,12 @@ const SimpptParser = (() => {
     if (btn.dataset.act === 'bigger') adjustSize(10)
     else if (btn.dataset.act === 'smaller') adjustSize(-10)
     else if (btn.dataset.act === 'clear' && selectedK >= 0) writeBlockAttrs(selectedK, null)
+    else if (btn.dataset.act === 'bold' && selectedK >= 0 && !selectedIsImg()) {
+      const found = currentBlock(selectedK)
+      if (!found) return
+      const bold = (found.block.attrs || {}).b === '1'
+      writeBlockAttrs(selectedK, { b: bold ? '' : '1' })
+    }
   })
 
   document.getElementById('tool-color').addEventListener('input', (e) => {
@@ -1363,6 +1409,7 @@ const SimpptParser = (() => {
   edPlayBtn.addEventListener('click', playFromEditor)
   edSaveBtn.addEventListener('click', saveDeck)
   document.getElementById('ed-reset').addEventListener('click', resetSlideLayout)
+  document.getElementById('ed-distribute').addEventListener('click', distributeVertically)
 
   document.getElementById('ed-home').addEventListener('click', () => {
     if (edDirty && !window.confirm('有未儲存的變更，確定回首頁？')) return

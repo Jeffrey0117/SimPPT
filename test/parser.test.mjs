@@ -181,6 +181,10 @@ test('c= sets block text color', () => {
   assert.equal(renderMarkdown('hi {c=#ff0000}'), '<p style="color:#ff0000">hi</p>')
 })
 
+test('b=1 sets block bold', () => {
+  assert.equal(renderMarkdown('hi {b=1}'), '<p style="font-weight:700">hi</p>')
+})
+
 test('paragraph with {x= y=} without s has no transform', () => {
   const out = renderMarkdown('hello world {x=10 y=50}')
   assert.equal(out, '<p class="txt-abs" style="left:10%;top:50%">hello world</p>')
