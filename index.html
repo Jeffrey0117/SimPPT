@@ -120,7 +120,7 @@
     max-width: 94%; text-align: left;
   }
   .gap { flex: 0 0 auto; width: 100%; pointer-events: none; }
-  .block-selected { outline: 2px solid #6c9ef8; outline-offset: 0.3vw; }
+  .block-selected { outline: 2px solid #6c9ef8; outline-offset: -2px; }
   #guide-v, #guide-h { position: absolute; pointer-events: none; z-index: 4; }
   #guide-v { top: 0; bottom: 0; width: 0; border-left: 0.15vw dashed #e94560; }
   #guide-h { left: 0; right: 0; height: 0; border-top: 0.15vw dashed #e94560; }
@@ -135,10 +135,12 @@
   #ed-frame img { -webkit-user-drag: none; }
   #ed-frame .slide-scope > *, #ed-frame #ed-overlay > * { cursor: move; user-select: none; }
   #ed-frame :is(h1, h2, h3, p, ul, ol, figure):not(.txt-abs):not(.img-abs) { position: relative; }
-  #ed-frame :is(h1, h2, h3, p, ul, ol, figure):hover { outline: 1px dashed rgba(108, 158, 248, 0.55); }
-  #ed-overlay > *:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); }
+  #ed-frame :is(h1, h2, h3, p, ul, ol, figure):hover {
+    outline: 1px dashed rgba(108, 158, 248, 0.55); outline-offset: -1px;
+  }
+  #ed-overlay > *:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); outline-offset: -2px; }
   .img-handle {
-    position: absolute; right: -0.8vw; bottom: -0.8vw;
+    position: absolute; right: 0.15vw; bottom: 0.15vw;
     width: 1.6vw; height: 1.6vw;
     background: #6c9ef8; border-radius: 0.3vw;
     cursor: nwse-resize; opacity: 0; z-index: 3;
@@ -162,7 +164,7 @@
   }
   #editor-bar button:hover { background: #2e2e3c; }
   #ed-status { font-size: 13px; color: #77777f; margin-left: auto; }
-  #editor-body { flex: 1; display: flex; min-height: 0; }
+  #editor-body { flex: 1; display: flex; min-height: 0; position: relative; }
   #ed-text {
     flex: 1; resize: none; border: 0; outline: none;
     background: #0b0b0f; color: #e8e8ee;
@@ -177,23 +179,24 @@
     align-items: center; justify-content: center; gap: 10px;
     background: #101014; overflow: hidden; padding: 16px;
   }
-  #ed-tools {
-    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 6px; align-items: center; z-index: 6;
+  .mini-tools {
+    position: absolute; display: flex; gap: 6px; align-items: center; z-index: 6;
     background: #16161d; border: 1px solid #26262f; border-radius: 8px;
     padding: 6px 10px;
   }
-  #ed-tools button {
+  #ed-tools { top: 8px; left: 50%; transform: translateX(-50%); }
+  #txt-tools { top: 8px; left: 14px; }
+  .mini-tools button {
     font: inherit; font-size: 13px; color: #f5f5f5;
     background: #23232e; border: 1px solid #3a3a4a; border-radius: 6px;
     padding: 3px 10px; cursor: pointer;
   }
-  #ed-tools button:hover { background: #2e2e3c; }
-  #ed-tools .swatch {
+  .mini-tools button:hover { background: #2e2e3c; }
+  .mini-tools .swatch {
     width: 18px; height: 18px; border-radius: 4px; cursor: pointer;
     border: 1px solid #3a3a4a;
   }
-  #ed-tools input[type="color"] {
+  .mini-tools input[type="color"] {
     width: 26px; height: 22px; border: 0; background: none; cursor: pointer; padding: 0;
   }
   #ed-viewport {
@@ -267,9 +270,22 @@
     <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
   </div>
   <div id="editor-body">
+    <div id="txt-tools" class="mini-tools" hidden>
+      <button data-act="bold" title="加粗選取的字（**粗體**）"><strong>B</strong></button>
+      <button data-act="smaller" title="縮小選取的字">A−</button>
+      <button data-act="bigger" title="放大選取的字">A＋</button>
+      <span class="swatch" data-c="#ffffff" style="background:#ffffff"></span>
+      <span class="swatch" data-c="#1c1c1e" style="background:#1c1c1e"></span>
+      <span class="swatch" data-c="#9aa0a6" style="background:#9aa0a6"></span>
+      <span class="swatch" data-c="#e94560" style="background:#e94560"></span>
+      <span class="swatch" data-c="#f4b860" style="background:#f4b860"></span>
+      <span class="swatch" data-c="#6c9ef8" style="background:#6c9ef8"></span>
+      <input type="color" id="txt-color" title="自訂顏色">
+      <button data-act="clear" title="移除選取文字的樣式">清除</button>
+    </div>
     <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
     <div id="ed-preview">
-      <div id="ed-tools" hidden>
+      <div id="ed-tools" class="mini-tools" hidden>
         <button data-act="bold" title="加粗整塊"><strong>B</strong></button>
         <button data-act="smaller" title="縮小字級">A−</button>
         <button data-act="bigger" title="放大字級">A＋</button>
@@ -1467,6 +1483,97 @@ const SimpptParser = (() => {
     applyColor(e.target.value)
   })
 
+  // --- 左側選字工具列：反白 → 包 {{文字|s= c= b=}} / **粗體** ---
+
+  const txtTools = document.getElementById('txt-tools')
+  const WRAP_RE = /^\{\{([^|{}]+)(?:\|([^}]*))?\}\}$/
+
+  const parseAttrStr = (str) => (str || '').split(/\s+/).filter(Boolean).reduce((acc, pair) => {
+    const eq = pair.indexOf('=')
+    return eq > 0 ? { ...acc, [pair.slice(0, eq)]: pair.slice(eq + 1) } : acc
+  }, {})
+
+  const serializeInlineAttrs = (attrs) => ['s', 'c', 'b']
+    .filter((key) => attrs[key] !== undefined && attrs[key] !== null && `${attrs[key]}` !== '')
+    .map((key) => `${key}=${attrs[key]}`)
+    .join(' ')
+
+  const updateTxtTools = () => {
+    txtTools.hidden = !(document.activeElement === edText
+      && edText.selectionEnd > edText.selectionStart)
+  }
+
+  const replaceSelection = (replacement) => {
+    edText.setRangeText(replacement, edText.selectionStart, edText.selectionEnd, 'select')
+    edDirty = true
+    setStatus('未儲存變更')
+    updatePreview(true)
+    scheduleSave()
+    updateTxtTools()
+  }
+
+  const selectedInline = () => {
+    const selected = edText.value.slice(edText.selectionStart, edText.selectionEnd)
+    const m = selected.match(WRAP_RE)
+    return { selected, inner: m ? m[1] : selected, attrs: m ? parseAttrStr(m[2]) : null }
+  }
+
+  const applyInline = (updates) => {
+    if (edText.selectionEnd <= edText.selectionStart) return
+    const { inner, attrs } = selectedInline()
+    if (/\n/.test(inner)) {
+      showToast('選取範圍不能跨行')
+      return
+    }
+    const ser = serializeInlineAttrs({ ...(attrs || {}), ...updates })
+    replaceSelection(ser ? `{{${inner}|${ser}}}` : inner)
+  }
+
+  const inlineBold = () => {
+    if (edText.selectionEnd <= edText.selectionStart) return
+    const { selected, attrs } = selectedInline()
+    if (attrs) applyInline({ b: attrs.b === '1' ? '' : '1' })
+    else if (/^\*\*([\s\S]+)\*\*$/.test(selected)) replaceSelection(selected.slice(2, -2))
+    else if (!/\n/.test(selected)) replaceSelection(`**${selected}**`)
+  }
+
+  txtTools.addEventListener('mousedown', (e) => {
+    if (e.target.id !== 'txt-color') e.preventDefault()
+  })
+
+  txtTools.addEventListener('click', (e) => {
+    const swatch = e.target.closest('.swatch')
+    if (swatch) {
+      applyInline({ c: swatch.dataset.c })
+      return
+    }
+    const btn = e.target.closest('button')
+    if (!btn) return
+    const { selected, inner, attrs } = selectedInline()
+    if (btn.dataset.act === 'bold') {
+      inlineBold()
+    } else if (btn.dataset.act === 'bigger' || btn.dataset.act === 'smaller') {
+      const cur = attrs ? parseFloat(attrs.s) || 100 : 100
+      const next = Math.min(400, Math.max(30, Math.round(cur + (btn.dataset.act === 'bigger' ? 25 : -25))))
+      applyInline({ s: String(next) })
+    } else if (btn.dataset.act === 'clear') {
+      if (attrs) replaceSelection(inner)
+      else if (/^\*\*([\s\S]+)\*\*$/.test(selected)) replaceSelection(selected.slice(2, -2))
+    }
+  })
+
+  document.getElementById('txt-color').addEventListener('input', (e) => {
+    applyInline({ c: e.target.value })
+  })
+
+  edText.addEventListener('select', updateTxtTools)
+  edText.addEventListener('mouseup', updateTxtTools)
+  edText.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (!txtTools.contains(document.activeElement)) txtTools.hidden = true
+    }, 150)
+  })
+
   newDeckBtn.addEventListener('click', () => {
     stopPolling()
     state.mdPath = ''
@@ -1567,7 +1674,10 @@ const SimpptParser = (() => {
     updatePreview(true)
     scheduleSave()
   })
-  edText.addEventListener('keyup', () => updatePreview(true))
+  edText.addEventListener('keyup', () => {
+    updatePreview(true)
+    updateTxtTools()
+  })
   edText.addEventListener('click', () => updatePreview(true))
 
   window.addEventListener('resize', () => {
@@ -1588,6 +1698,9 @@ const SimpptParser = (() => {
     } else if (e.code === 'Enter' || e.key === 'Enter') {
       e.preventDefault()
       playFromEditor()
+    } else if (e.code === 'KeyB' && document.activeElement === edText) {
+      e.preventDefault()
+      inlineBold()
     }
   }, { capture: true })
 
