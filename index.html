@@ -662,6 +662,13 @@ const SimpptParser = (() => {
     if (clamped === state.index) return
     state.index = clamped
     renderSlide()
+    if (state.deckUrl && !stage.hidden) {
+      try {
+        sessionStorage.setItem(`simppt-idx:${state.deckUrl}`, String(clamped))
+      } catch {
+        // sessionStorage 被擋就算了
+      }
+    }
     scheduleSave()
   }
 
@@ -1327,6 +1334,8 @@ const SimpptParser = (() => {
       mdPath: state.mdPath,
       index: state.index,
       dirty: edDirty,
+      cursor: !editor.hidden ? edText.selectionStart : 0,
+      scroll: !editor.hidden ? edText.scrollTop : 0,
     }
     try {
       localStorage.setItem('simppt-session', JSON.stringify(session))
@@ -1380,6 +1389,11 @@ const SimpptParser = (() => {
         loadDeck(s.text, state.mdPath || '未命名.md', state.fileMap)
       } else {
         enterEditor(s.text)
+        if (typeof s.cursor === 'number') {
+          edText.setSelectionRange(s.cursor, s.cursor)
+          edText.scrollTop = s.scroll || 0
+          updatePreview()
+        }
         if (s.dirty) {
           edDirty = true
           setStatus('未儲存變更（重整前的內容已還原）')
@@ -1419,6 +1433,8 @@ const SimpptParser = (() => {
       }
     }
     if (await load()) {
+      const savedIdx = parseInt(sessionStorage.getItem(`simppt-idx:${deckParam}`) || '', 10)
+      if (Number.isFinite(savedIdx) && savedIdx > 0) goTo(savedIdx)
       stopTimer()
       state.pollTimer = setInterval(load, 1000)
     }
