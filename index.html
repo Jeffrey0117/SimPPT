@@ -126,6 +126,8 @@
     font-variant-numeric: tabular-nums; letter-spacing: 0.3vw;
   }
   .countdown.done { animation: cd-blink 1s step-end infinite; }
+  .countdown.paused { opacity: 0.45; }
+  #stage .countdown { cursor: pointer; }
   @keyframes cd-blink { 50% { opacity: 0.25; } }
   .block-selected { outline: 2px solid #6c9ef8; outline-offset: -2px; }
   #guide-v, #guide-h { position: absolute; pointer-events: none; z-index: 4; }
@@ -405,6 +407,8 @@
       <button id="pr-next">下一頁 ▶</button>
       <button id="pr-draw">畫筆 D</button>
       <button id="pr-clearink">清筆跡 X</button>
+      <button id="pr-cd-toggle" title="暫停/繼續觀眾視窗的倒數">倒數 ⏯</button>
+      <button id="pr-cd-reset" title="重新倒數（R）">倒數 ↺</button>
       <button id="pr-exit">結束 Esc</button>
     </div>
     <p class="keys-hint">←/→/空白鍵 翻頁（兩視窗同步）· 畫筆在觀眾視窗上動手畫</p>
@@ -869,6 +873,10 @@ const SimpptParser = (() => {
   // --- 倒數頁：--- countdown=3:00 ---
 
   let countdownId = null
+  let cdEl = null
+  let cdTotal = 0
+  let cdRemain = 0
+  let cdRunning = false
 
   const parseCountdown = (value) => {
     if (!value) return null
@@ -884,6 +892,33 @@ const SimpptParser = (() => {
     return `${mm}:${ss}`
   }
 
+  const cdPaint = () => {
+    if (!cdEl) return
+    cdEl.textContent = fmtMMSS(Math.max(0, cdRemain))
+    cdEl.classList.toggle('done', cdRemain <= 0)
+    cdEl.classList.toggle('paused', !cdRunning && cdRemain > 0)
+  }
+
+  const toggleCountdown = () => {
+    if (!cdEl || cdRemain <= 0) return
+    cdRunning = !cdRunning
+    cdPaint()
+  }
+
+  const resetCountdown = () => {
+    if (!cdEl) return
+    cdRemain = cdTotal
+    cdRunning = true
+    cdPaint()
+  }
+
+  const stopCountdown = () => {
+    clearInterval(countdownId)
+    countdownId = null
+    cdEl = null
+    cdRunning = false
+  }
+
   const appendCountdown = (container, meta, live) => {
     const secs = parseCountdown(meta.countdown)
     if (!secs) return
@@ -892,23 +927,27 @@ const SimpptParser = (() => {
     el.textContent = fmtMMSS(secs)
     container.appendChild(el)
     if (!live) return
-    let remain = secs
+    cdEl = el
+    cdTotal = secs
+    cdRemain = secs
+    cdRunning = true
+    el.title = '點一下暫停/繼續，R 重新倒數'
+    el.addEventListener('click', (e) => {
+      e.stopPropagation()
+      toggleCountdown()
+    })
     clearInterval(countdownId)
     countdownId = setInterval(() => {
-      remain -= 1
-      if (remain <= 0) {
-        el.textContent = '00:00'
-        el.classList.add('done')
-        clearInterval(countdownId)
-        return
-      }
-      el.textContent = fmtMMSS(remain)
+      if (!cdRunning || !cdEl) return
+      cdRemain -= 1
+      cdPaint()
+      if (cdRemain <= 0) cdRunning = false
     }, 1000)
   }
 
   const renderSlide = () => {
     fitStage()
-    clearInterval(countdownId)
+    stopCountdown()
     const slide = state.deck.slides[state.index]
     const meta = { ...state.deck.globals, ...slide.meta }
     stage.style.background = '#000'
@@ -1929,7 +1968,7 @@ const SimpptParser = (() => {
   }
 
   const exitPlay = () => {
-    clearInterval(countdownId)
+    stopCountdown()
     setDrawMode(false)
     const slide = state.deck && state.deck.slides[state.index]
     enterEditor(state.sourceText)
@@ -1965,6 +2004,10 @@ const SimpptParser = (() => {
     }
     if (key === 'x' || key === 'X') {
       clearInk()
+      return
+    }
+    if (key === 'r' || key === 'R') {
+      resetCountdown()
       return
     }
     if (key === 'n' || key === 'N') {
@@ -2183,6 +2226,12 @@ const SimpptParser = (() => {
   document.getElementById('pr-clearink').addEventListener('click', () => {
     if (channel) channel.postMessage({ type: 'clearInk' })
   })
+  document.getElementById('pr-cd-toggle').addEventListener('click', () => {
+    if (channel) channel.postMessage({ type: 'cd', action: 'toggle' })
+  })
+  document.getElementById('pr-cd-reset').addEventListener('click', () => {
+    if (channel) channel.postMessage({ type: 'cd', action: 'reset' })
+  })
 
   document.addEventListener('keydown', (e) => {
     if (presenter.hidden) return
@@ -2201,6 +2250,8 @@ const SimpptParser = (() => {
       setRemoteDraw(!prDrawOn)
     } else if (key === 'x' || key === 'X') {
       if (channel) channel.postMessage({ type: 'clearInk' })
+    } else if (key === 'r' || key === 'R') {
+      if (channel) channel.postMessage({ type: 'cd', action: 'reset' })
     } else if (key === 'Escape') {
       exitPresenter()
     }
@@ -2228,6 +2279,9 @@ const SimpptParser = (() => {
           setDrawMode(!!msg.on)
         } else if (msg.type === 'clearInk') {
           clearInk()
+        } else if (msg.type === 'cd') {
+          if (msg.action === 'reset') resetCountdown()
+          else toggleCountdown()
         }
       } else if (msg.type === 'hello' && !presenter.hidden) {
         broadcastDeck()
