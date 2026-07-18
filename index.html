@@ -227,6 +227,22 @@
   #ink {
     position: fixed; inset: 0; z-index: 5; pointer-events: none;
   }
+  #stage-strip {
+    position: fixed; left: 0; right: 0; bottom: 10px;
+    display: flex; justify-content: center; gap: 10px; z-index: 6;
+  }
+  .st-thumb {
+    position: relative; overflow: hidden; cursor: pointer;
+    border-radius: 5px; box-shadow: 0 0 0 1px #2e2e3c; flex: 0 0 auto;
+  }
+  .st-thumb:hover { box-shadow: 0 0 0 2px #9aa0a6; }
+  .st-thumb.current { box-shadow: 0 0 0 2px #6c9ef8; }
+  .st-thumb .pr-frame { transform-origin: top left; }
+  .st-num {
+    position: absolute; bottom: 3px; right: 5px;
+    font-size: 11px; color: #fff; background: rgba(0, 0, 0, 0.55);
+    padding: 0 5px; border-radius: 3px; z-index: 2;
+  }
   #stage.draw-mode #ink { pointer-events: auto; cursor: crosshair; }
   #notes-panel {
     position: fixed; left: 2vw; bottom: 2.5vh; max-width: 42vw;
@@ -334,6 +350,7 @@
     <div id="stage-overlay" class="slide-scope"></div>
   </div>
   <canvas id="ink"></canvas>
+  <div id="stage-strip" hidden></div>
   <div id="notes-panel" hidden></div>
   <div id="indicator" hidden></div>
   <button id="exit-play" title="回編輯（Esc）">✕</button>
@@ -965,7 +982,58 @@ const SimpptParser = (() => {
     clearInk()
     notesPanel.textContent = slide.notes || ''
     notesPanel.hidden = !state.showNotes || !slide.notes
+    updateStageStrip()
   }
+
+  const stageStrip = document.getElementById('stage-strip')
+
+  const updateStageStrip = () => {
+    if (!state.deck || stage.hidden || ROLE === 'stage' || document.fullscreenElement) {
+      stageStrip.hidden = true
+      return
+    }
+    const target = window.innerWidth * 0.5625
+    const scale = window.innerHeight < target ? window.innerHeight / target : 1
+    const barH = (window.innerHeight - target * scale) / 2
+    const h = Math.min(barH - 20, 140)
+    if (h < 65) {
+      stageStrip.hidden = true
+      return
+    }
+    stageStrip.hidden = false
+    stageStrip.innerHTML = ''
+    const total = state.deck.slides.length
+    const count = Math.min(5, total)
+    const from = Math.max(0, Math.min(state.index - 2, total - count))
+    for (let i = from; i < from + count; i += 1) {
+      const thumb = document.createElement('div')
+      thumb.className = `st-thumb${i === state.index ? ' current' : ''}`
+      thumb.style.width = `${(h * 16) / 9}px`
+      thumb.style.height = `${h}px`
+      const frame = document.createElement('div')
+      frame.className = 'pr-frame'
+      frame.style.transform = `scale(${h / (window.innerWidth * 0.5625)})`
+      const thumbContent = document.createElement('div')
+      thumbContent.className = 'deck-slide slide-scope'
+      const thumbOverlay = document.createElement('div')
+      thumbOverlay.className = 'slide-scope pr-overlay'
+      frame.append(thumbContent, thumbOverlay)
+      const num = document.createElement('span')
+      num.className = 'st-num'
+      num.textContent = String(i + 1)
+      thumb.append(frame, num)
+      thumb.addEventListener('click', (e) => {
+        e.stopPropagation()
+        goTo(i)
+      })
+      stageStrip.append(thumb)
+      renderInto(frame, thumbContent, thumbOverlay, state.deck, i)
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    if (!stage.hidden) updateStageStrip()
+  })
 
   const revokeBlobs = () => {
     for (const url of state.blobUrls.values()) URL.revokeObjectURL(url)
@@ -1941,6 +2009,7 @@ const SimpptParser = (() => {
     if (!stage.hidden) {
       fitStage()
       clearInk()
+      updateStageStrip()
     }
   })
 
