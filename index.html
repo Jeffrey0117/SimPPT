@@ -134,8 +134,8 @@
   #ed-overlay > * { pointer-events: auto; }
   #ed-frame img { -webkit-user-drag: none; }
   #ed-frame .slide-scope > *, #ed-frame #ed-overlay > * { cursor: move; user-select: none; }
-  #ed-frame .slide-scope > *:not(.txt-abs):not(.img-abs):not(.gap) { position: relative; }
-  #ed-frame .slide-scope > *:hover { outline: 1px dashed rgba(108, 158, 248, 0.55); }
+  #ed-frame :is(h1, h2, h3, p, ul, ol, figure):not(.txt-abs):not(.img-abs) { position: relative; }
+  #ed-frame :is(h1, h2, h3, p, ul, ol, figure):hover { outline: 1px dashed rgba(108, 158, 248, 0.55); }
   #ed-overlay > *:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); }
   .img-handle {
     position: absolute; right: -0.8vw; bottom: -0.8vw;
@@ -436,7 +436,18 @@ const SimpptParser = (() => {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 
+  const inlineSpan = (txt, attrStr) => {
+    const attrs = attrStr ? parseDirectives(attrStr) : {}
+    const styles = []
+    const s = parseFloat(attrs.s)
+    if (Number.isFinite(s) && s !== 100) styles.push(`font-size:${parseFloat((s / 100).toFixed(3))}em`)
+    if (attrs.c && /^[#\w(),.%\s-]+$/.test(attrs.c)) styles.push(`color:${attrs.c}`)
+    if (attrs.b === '1' || attrs.b === 'true') styles.push('font-weight:700')
+    return styles.length > 0 ? `<span style="${styles.join(';')}">${txt}</span>` : txt
+  }
+
   const inline = (s) => s
+    .replace(/\{\{([^|{}]+)(?:\|([^}]*))?\}\}/g, (m, txt, attrStr) => inlineSpan(txt, attrStr))
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')

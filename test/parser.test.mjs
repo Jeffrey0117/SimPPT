@@ -199,6 +199,17 @@ test('extra blank lines become vertical gap spacers', () => {
   )
 })
 
+test('inline {{text|attrs}} styles part of a sentence', () => {
+  assert.equal(
+    renderMarkdown('a {{big|s=200 c=#ff0000}} b'),
+    '<p>a <span style="font-size:2em;color:#ff0000">big</span> b</p>',
+  )
+  assert.equal(
+    renderMarkdown('# 你{{只}}需要 {{管|b=1}}'),
+    '<h1>你只需要 <span style="font-weight:700">管</span></h1>',
+  )
+})
+
 test('b=1 sets block bold', () => {
   assert.equal(renderMarkdown('hi {b=1}'), '<p style="font-weight:700">hi</p>')
 })
