@@ -438,12 +438,12 @@ const SimpptParser = (() => {
         cur = { type: 'ul', items: [s.text], attrs: s.attrs, start: i }
         continue
       }
-      const ol = raw.match(/^\d+\.\s+(.*)$/)
+      const ol = raw.match(/^(\d+)\.\s+(.*)$/)
       if (ol) {
-        if (cur && cur.type === 'ol') { cur.items.push(ol[1]); continue }
+        if (cur && cur.type === 'ol') { cur.items.push(ol[2]); continue }
         flush()
-        const s = stripAttrTail(ol[1])
-        cur = { type: 'ol', items: [s.text], attrs: s.attrs, start: i }
+        const s = stripAttrTail(ol[2])
+        cur = { type: 'ol', items: [s.text], attrs: s.attrs, start: i, startNum: parseInt(ol[1], 10) }
         continue
       }
       if (cur && cur.type === 'p') { cur.lines.push(raw); continue }
@@ -482,7 +482,8 @@ const SimpptParser = (() => {
     const abs = textAbsAttr(b.attrs)
     if (b.type === 'h') return `<h${b.level}${abs}>${inline(escapeHtml(b.text))}</h${b.level}>`
     if (b.type === 'ul' || b.type === 'ol') {
-      return `<${b.type}${abs}>${b.items.map((i) => `<li>${inline(escapeHtml(i))}</li>`).join('')}</${b.type}>`
+      const startAttr = b.type === 'ol' && b.startNum > 1 ? ` start="${b.startNum}"` : ''
+      return `<${b.type}${abs}${startAttr}>${b.items.map((i) => `<li>${inline(escapeHtml(i))}</li>`).join('')}</${b.type}>`
     }
     return `<p${abs}>${inline(escapeHtml(b.lines.join(' ')))}</p>`
   }).join('')

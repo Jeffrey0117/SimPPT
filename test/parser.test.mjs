@@ -163,6 +163,11 @@ test('slideLineRange returns raw line span of a slide', () => {
   assert.equal(slideLineRange(text, 2), null)
 })
 
+test('ordered list starting at 2 keeps its number via start attr', () => {
+  assert.equal(renderMarkdown('2. second point'), '<ol start="2"><li>second point</li></ol>')
+  assert.equal(renderMarkdown('1. a\n\ntext\n\n2. b'), '<ol><li>a</li></ol><p>text</p><ol start="2"><li>b</li></ol>')
+})
+
 test('heading with {x= y= s=} renders absolutely positioned + scaled', () => {
   const out = renderMarkdown('# T {x=5 y=6 s=120}')
   assert.equal(out, '<h1 class="txt-abs" style="left:5%;top:6%;transform:scale(1.2)">T</h1>')
