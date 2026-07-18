@@ -252,7 +252,6 @@
   <div id="editor-bar">
     <button id="ed-play">▶ 播放</button>
     <button id="ed-save">儲存 .md</button>
-    <button id="ed-distribute" title="把此頁所有拖曳過的區塊上下等距排列（保持第一塊和最後一塊位置）">等距排列</button>
     <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
     <button id="ed-home">首頁</button>
     <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
@@ -271,7 +270,8 @@
         <span class="swatch" data-c="#f4b860" style="background:#f4b860"></span>
         <span class="swatch" data-c="#6c9ef8" style="background:#6c9ef8"></span>
         <input type="color" id="tool-color" title="自訂顏色">
-        <button data-act="clear" title="清掉此塊的樣式改動">清除</button>
+        <button data-act="dist" title="把選取的區塊上下等距排列（Shift 點選多個）">等距</button>
+        <button data-act="clear" title="清掉選取區塊的樣式改動">清除</button>
       </div>
       <div id="ed-viewport">
         <div id="ed-frame"><div id="ed-content" class="deck-slide slide-scope"></div><div id="ed-overlay" class="slide-scope"></div><div id="guide-v" hidden></div><div id="guide-h" hidden></div></div>
@@ -946,12 +946,8 @@ const SimpptParser = (() => {
     applyLayout(edContent, meta.layout)
     applyWidth(edContent, meta.width)
     edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
-    if (selectedK >= 0 && previewBlocks[selectedK]) {
-      previewBlocks[selectedK].classList.add('block-selected')
-    } else if (selectedK >= 0) {
-      selectedK = -1
-      edTools.hidden = true
-    }
+    selectedKs = new Set([...selectedKs].filter((k) => previewBlocks[k]))
+    applySelectionClasses()
   }
 
   const enterEditor = (text) => {
@@ -1153,7 +1149,8 @@ const SimpptParser = (() => {
     const frameRect = edFrame.getBoundingClientRect()
     const items = previewBlocks
       .map((el, k) => ({ el, k }))
-      .filter(({ el }) => el.classList.contains('txt-abs') || el.classList.contains('img-abs'))
+      .filter(({ el, k }) => selectedKs.has(k)
+        && (el.classList.contains('txt-abs') || el.classList.contains('img-abs')))
       .map(({ el, k }) => ({
         k,
         top: parseFloat(el.style.top) || 0,
@@ -1161,7 +1158,7 @@ const SimpptParser = (() => {
       }))
       .sort((a, b) => a.top - b.top)
     if (items.length < 3) {
-      showToast('至少要三個拖曳過的區塊才能等距排列')
+      showToast('按住 Shift 點選至少三個拖曳過的區塊，再按等距')
       return
     }
     const first = items[0]
@@ -1199,19 +1196,30 @@ const SimpptParser = (() => {
   const guideH = document.getElementById('guide-h')
   const edTools = document.getElementById('ed-tools')
   let dragCtx = null
-  let selectedK = -1
+  let selectedKs = new Set()
 
-  const deselectBlock = () => {
-    selectedK = -1
-    edTools.hidden = true
+  const applySelectionClasses = () => {
     for (const el of document.querySelectorAll('.block-selected')) el.classList.remove('block-selected')
+    for (const k of selectedKs) {
+      if (previewBlocks[k]) previewBlocks[k].classList.add('block-selected')
+    }
+    edTools.hidden = selectedKs.size === 0
   }
 
-  const selectBlock = (el, k) => {
-    deselectBlock()
-    selectedK = k
-    el.classList.add('block-selected')
-    edTools.hidden = false
+  const deselectBlock = () => {
+    selectedKs = new Set()
+    applySelectionClasses()
+  }
+
+  const selectBlock = (el, k, additive) => {
+    if (!additive) {
+      selectedKs = new Set([k])
+    } else if (selectedKs.has(k)) {
+      selectedKs = new Set([...selectedKs].filter((s) => s !== k))
+    } else {
+      selectedKs = new Set([...selectedKs, k])
+    }
+    applySelectionClasses()
   }
 
   const hideGuides = () => {
@@ -1240,6 +1248,7 @@ const SimpptParser = (() => {
     e.preventDefault()
     dragCtx = {
       el, k,
+      additive: e.shiftKey || e.ctrlKey,
       mode: e.target.closest('.img-handle') ? 'resize' : 'move',
       frameRect: edFrame.getBoundingClientRect(),
       isImg: el.tagName === 'FIGURE',
@@ -1332,11 +1341,11 @@ const SimpptParser = (() => {
 
   window.addEventListener('mouseup', () => {
     if (!dragCtx) return
-    const { el, k, isImg, moved, mode } = dragCtx
+    const { el, k, isImg, moved, mode, additive } = dragCtx
     dragCtx = null
     hideGuides()
     if (!moved) {
-      selectBlock(el, k)
+      selectBlock(el, k, additive)
       return
     }
     if (mode === 'resize') {
@@ -1352,45 +1361,60 @@ const SimpptParser = (() => {
     else writeBlockAttrs(k, pos)
   })
 
-  // --- 選取後的迷你工具列 ---
+  // --- 選取後的迷你工具列（可 Shift 多選） ---
 
-  const selectedIsImg = () => selectedK >= 0 && previewBlocks[selectedK] && previewBlocks[selectedK].tagName === 'FIGURE'
+  const isImgBlock = (k) => previewBlocks[k] && previewBlocks[k].tagName === 'FIGURE'
+  const selectedTexts = () => [...selectedKs].sort((a, b) => a - b).filter((k) => !isImgBlock(k))
+  const allSelected = () => [...selectedKs].sort((a, b) => a - b)
 
   const adjustSize = (delta) => {
-    if (selectedK < 0) return
-    const found = currentBlock(selectedK)
-    if (!found) return
-    const attrs = found.block.attrs || {}
-    if (selectedIsImg()) {
-      const w = parseFloat(attrs.w) || 30
-      writeBlockAttrs(selectedK, { w: String(Math.min(100, Math.max(5, Math.round(w + delta / 2)))) })
-    } else {
-      const s = parseFloat(attrs.s) || 100
-      writeBlockAttrs(selectedK, { s: String(Math.min(400, Math.max(30, Math.round(s + delta)))) })
+    for (const k of allSelected()) {
+      const found = currentBlock(k)
+      if (!found) continue
+      const attrs = found.block.attrs || {}
+      if (isImgBlock(k)) {
+        const w = parseFloat(attrs.w) || 30
+        writeBlockAttrs(k, { w: String(Math.min(100, Math.max(5, Math.round(w + delta / 2)))) })
+      } else {
+        const s = parseFloat(attrs.s) || 100
+        writeBlockAttrs(k, { s: String(Math.min(400, Math.max(30, Math.round(s + delta)))) })
+      }
     }
+  }
+
+  const toggleBold = () => {
+    const targets = selectedTexts()
+    if (targets.length === 0) return
+    const allBold = targets.every((k) => {
+      const found = currentBlock(k)
+      return found && (found.block.attrs || {}).b === '1'
+    })
+    for (const k of targets) writeBlockAttrs(k, { b: allBold ? '' : '1' })
+  }
+
+  const applyColor = (c) => {
+    for (const k of selectedTexts()) writeBlockAttrs(k, { c })
   }
 
   edTools.addEventListener('click', (e) => {
     const swatch = e.target.closest('.swatch')
     if (swatch) {
-      if (selectedK >= 0 && !selectedIsImg()) writeBlockAttrs(selectedK, { c: swatch.dataset.c })
+      applyColor(swatch.dataset.c)
       return
     }
     const btn = e.target.closest('button')
     if (!btn) return
     if (btn.dataset.act === 'bigger') adjustSize(10)
     else if (btn.dataset.act === 'smaller') adjustSize(-10)
-    else if (btn.dataset.act === 'clear' && selectedK >= 0) writeBlockAttrs(selectedK, null)
-    else if (btn.dataset.act === 'bold' && selectedK >= 0 && !selectedIsImg()) {
-      const found = currentBlock(selectedK)
-      if (!found) return
-      const bold = (found.block.attrs || {}).b === '1'
-      writeBlockAttrs(selectedK, { b: bold ? '' : '1' })
+    else if (btn.dataset.act === 'bold') toggleBold()
+    else if (btn.dataset.act === 'dist') distributeVertically()
+    else if (btn.dataset.act === 'clear') {
+      for (const k of allSelected()) writeBlockAttrs(k, null)
     }
   })
 
   document.getElementById('tool-color').addEventListener('input', (e) => {
-    if (selectedK >= 0 && !selectedIsImg()) writeBlockAttrs(selectedK, { c: e.target.value })
+    applyColor(e.target.value)
   })
 
   newDeckBtn.addEventListener('click', () => {
@@ -1425,7 +1449,6 @@ const SimpptParser = (() => {
   edPlayBtn.addEventListener('click', playFromEditor)
   edSaveBtn.addEventListener('click', saveDeck)
   document.getElementById('ed-reset').addEventListener('click', resetSlideLayout)
-  document.getElementById('ed-distribute').addEventListener('click', distributeVertically)
 
   document.getElementById('ed-home').addEventListener('click', () => {
     if (edDirty && !window.confirm('有未儲存的變更，確定回首頁？')) return
