@@ -270,6 +270,7 @@
     background: #131318; border: 1px solid #26262f; border-radius: 10px;
     padding: 16px 18px; font-size: 22px; line-height: 1.8; white-space: pre-wrap;
   }
+  #pr-notes.hints { color: #9aa0a6; font-size: 19px; }
   #pr-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   #pr-buttons button {
     font: inherit; font-size: 16px; color: #f5f5f5;
@@ -330,6 +331,7 @@
   <div id="editor-bar">
     <button id="ed-play">▶ 播放</button>
     <button id="ed-present" title="開觀眾視窗（拿去錄影），這個視窗變講者台">🎤 講者</button>
+    <button id="ed-outline" title="在此頁插入 note: 演講稿結構骨架（把提示換成你的故事）">稿架</button>
     <button id="ed-save">儲存 .md</button>
     <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
     <button id="ed-home">首頁</button>
@@ -1771,6 +1773,26 @@ const SimpptParser = (() => {
   edSaveBtn.addEventListener('click', saveDeck)
   document.getElementById('ed-reset').addEventListener('click', resetSlideLayout)
 
+  document.getElementById('ed-outline').addEventListener('click', () => {
+    const ctx = currentSlideLines()
+    if (!ctx) return
+    const slice = ctx.lines.slice(ctx.range.start, ctx.range.end)
+    if (slice.some((line) => /^note:/i.test(line.trim()))) {
+      showToast('這頁已經有 note: 了，直接改寫即可')
+      return
+    }
+    const deck = SimpptParser.parse(edText.value, { keepEmpty: true })
+    const hints = structuralHints(deck, previewIdx)
+    let end = ctx.range.end
+    while (end > ctx.range.start && ctx.lines[end - 1].trim() === '') end -= 1
+    setEditorText([
+      ...ctx.lines.slice(0, end),
+      '',
+      ...hints.map((h) => `note: ${h}`),
+      ...ctx.lines.slice(end),
+    ])
+  })
+
   document.getElementById('ed-home').addEventListener('click', () => {
     if (edDirty && !window.confirm('有未儲存的變更，確定回首頁？')) return
     stopPolling()
@@ -2005,12 +2027,68 @@ const SimpptParser = (() => {
     fitFrameTo(prNextVp, prNextFrame, availW * 0.55, availH * 0.3)
   }
 
+  const structuralHints = (deck, idx) => {
+    const slide = deck.slides[idx]
+    const total = deck.slides.length
+    const body = (slide && slide.body) || ''
+    const contentLines = body.split('\n').filter((l) => l.trim() !== '' && !/^note:/i.test(l.trim()))
+    if (idx === 0) {
+      return [
+        '【鉤子】一句話讓人非聽不可（痛點／反直覺／具體數字）',
+        '【承諾】這場聽完，觀眾會得到什麼 — 一句話',
+        '【轉場】「先從◯◯說起」',
+      ]
+    }
+    if (idx === total - 1) {
+      return [
+        '【總結】重複最重要的「一件事」（就一件）',
+        '【行動呼籲】叫觀眾做一個具體動作',
+        '【收尾】一句讓人記住你的話',
+      ]
+    }
+    if (/!\[/.test(body)) {
+      return [
+        '【指圖】先說這張圖「哪裡」值得看',
+        '【解讀】它證明了什麼主張',
+        '【故事】這數字／畫面背後的親身經歷',
+        '【轉場】一句話接到下一頁',
+      ]
+    }
+    if (/^\s*([-*]|\d+\.)\s/m.test(body)) {
+      return [
+        '【預告】先說「有幾點」再開講',
+        '【逐點】每一點＝主張一句＋例子一句',
+        '【強調】哪一點最重要？講到它時放慢',
+        '【轉場】一句話接到下一頁',
+      ]
+    }
+    if (contentLines.length <= 2) {
+      return [
+        '【停頓】大字頁 — 先停兩秒讓觀眾自己讀完',
+        '【放大】用一個故事或例子撐起這句話',
+        '【轉場】一句話接到下一頁',
+      ]
+    }
+    return [
+      '【主張】這頁要觀眾記住的一件事',
+      '【證據】你的親身故事／數字放這裡',
+      '【收尾】把主張換句話再說一次',
+      '【轉場】一句話接到下一頁',
+    ]
+  }
+
   const renderPresenter = () => {
     const slide = state.deck.slides[pIdx]
     renderInto(prCurFrame, prCurContent, prCurOverlay, state.deck, pIdx)
     renderInto(prNextFrame, prNextContent, prNextOverlay, state.deck, pIdx + 1)
     prPage.textContent = `${pIdx + 1} / ${state.deck.slides.length}`
-    prNotes.textContent = (slide && slide.notes) || '（這頁沒有 note: 演講稿）'
+    if (slide && slide.notes) {
+      prNotes.textContent = slide.notes
+      prNotes.classList.remove('hints')
+    } else {
+      prNotes.textContent = `💡 結構提示（用 note: 寫你自己的稿就會取代）\n\n${structuralHints(state.deck, pIdx).join('\n')}`
+      prNotes.classList.add('hints')
+    }
   }
 
   const broadcastDeck = () => {
