@@ -7,6 +7,16 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
+
+  * { scrollbar-width: thin; scrollbar-color: #333342 transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: #333342; border-radius: 6px;
+    border: 2px solid transparent; background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #4a4a60; background-clip: padding-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-corner { background: transparent; }
   body {
     font-family: system-ui, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
     background: #101014;
@@ -826,7 +836,10 @@ const SimpptParser = (() => {
 
   let edDirty = false
 
-  const setStatus = (msg) => { edStatus.textContent = msg }
+  const setStatus = (msg, ok = false) => {
+    edStatus.textContent = msg
+    edStatus.style.color = ok ? '#7dcf8a' : ''
+  }
 
   const fitPreview = () => {
     const w = edPreviewBox.clientWidth - 32
@@ -948,7 +961,7 @@ const SimpptParser = (() => {
       }
       state.sourceText = text
       edDirty = false
-      setStatus(`已儲存 ✓ ${new Date().toLocaleTimeString()}`)
+      setStatus(`已儲存 ✓ ${new Date().toLocaleTimeString()}`, true)
       scheduleSave()
     } catch (err) {
       if (err && err.name === 'AbortError') return
@@ -1129,15 +1142,15 @@ const SimpptParser = (() => {
   window.addEventListener('beforeunload', () => saveSession())
 
   document.addEventListener('keydown', (e) => {
-    if (editor.hidden) return
-    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+    if (editor.hidden || !(e.ctrlKey || e.metaKey)) return
+    if (e.code === 'KeyS' || e.key === 's' || e.key === 'S') {
       e.preventDefault()
       saveDeck()
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    } else if (e.code === 'Enter' || e.key === 'Enter') {
       e.preventDefault()
       playFromEditor()
     }
-  })
+  }, { capture: true })
 
   // --- 導覽 ---
 
