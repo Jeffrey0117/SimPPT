@@ -944,6 +944,28 @@ const SimpptParser = (() => {
     setTimeout(() => URL.revokeObjectURL(url), 5000)
   }
 
+  const serverAutoSave = async (text) => {
+    const base = (state.mdPath || '').split('/').pop()
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+    const rel = /^decks\//.test(state.mdPath)
+      ? state.mdPath
+      : `decks/${base && /\.(md|markdown)$/i.test(base) ? base : `未命名-${stamp}.md`}`
+    try {
+      const res = await fetch('/__save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: rel, text }),
+      })
+      if (!res.ok) return false
+      state.mdPath = rel
+      state.deckUrl = rel
+      document.title = `simppt — ${rel.split('/').pop()}`
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const saveDeck = async () => {
     const text = edText.value
     try {
@@ -961,6 +983,8 @@ const SimpptParser = (() => {
         const handle = await handleForPath(state.dirHandle, state.mdPath)
         await writeTo(handle, text)
         state.lastModified = (await handle.getFile()).lastModified
+      } else if (/^https?:$/.test(location.protocol) && await serverAutoSave(text)) {
+        // 已直接存進 server 的 decks/
       } else if (window.showSaveFilePicker) {
         const handle = await window.showSaveFilePicker({
           suggestedName: (state.mdPath || '簡報.md').split('/').pop(),
@@ -974,7 +998,8 @@ const SimpptParser = (() => {
       }
       state.sourceText = text
       edDirty = false
-      setStatus(`已儲存 ✓ ${new Date().toLocaleTimeString()}`, true)
+      appendHistory(text, state.mdPath)
+      setStatus(`已儲存 ✓ ${state.deckUrl || state.mdPath || '簡報.md'} ${new Date().toLocaleTimeString()}`, true)
       scheduleSave()
     } catch (err) {
       if (err && err.name === 'AbortError') return
