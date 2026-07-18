@@ -1088,10 +1088,19 @@ const SimpptParser = (() => {
   }
 
   const setEditorText = (lines) => {
+    const oldText = edText.value
+    const newText = lines.join('\n')
     const selStart = edText.selectionStart
     const selEnd = edText.selectionEnd
-    edText.value = lines.join('\n')
-    edText.setSelectionRange(selStart, selEnd)
+    const scroll = edText.scrollTop
+    let prefix = 0
+    const minLen = Math.min(oldText.length, newText.length)
+    while (prefix < minLen && oldText[prefix] === newText[prefix]) prefix += 1
+    const delta = newText.length - oldText.length
+    const adjust = (pos) => (pos <= prefix ? pos : Math.max(prefix, pos + delta))
+    edText.value = newText
+    edText.setSelectionRange(adjust(selStart), adjust(selEnd))
+    edText.scrollTop = scroll
     edDirty = true
     setStatus('未儲存變更')
     updatePreview()
@@ -1299,11 +1308,18 @@ const SimpptParser = (() => {
       if (other === el || other.classList.contains('img-handle')) continue
       const ox = parseFloat(other.style.left)
       const oy = parseFloat(other.style.top)
-      if (snapX === null && Number.isFinite(ox) && Math.abs(proposed.x - ox) < SNAP) {
+      if (!Number.isFinite(ox) || !Number.isFinite(oy)) continue
+      const or = other.getBoundingClientRect()
+      const ocx = ox + ((or.width / frameRect.width) * 100) / 2
+      if (snapX === null && Math.abs(proposed.x - ox) < SNAP) {
         snapX = ox
         guideV.style.left = `${ox}%`
       }
-      if (snapY === null && Number.isFinite(oy) && Math.abs(proposed.y - oy) < SNAP) {
+      if (snapX === null && Math.abs(proposed.x + bw / 2 - ocx) < SNAP) {
+        snapX = ocx - bw / 2
+        guideV.style.left = `${ocx}%`
+      }
+      if (snapY === null && Math.abs(proposed.y - oy) < SNAP) {
         snapY = oy
         guideH.style.top = `${oy}%`
       }
