@@ -234,6 +234,57 @@
   }
   #exit-play:hover { opacity: 0.9; }
 
+  #presenter {
+    position: fixed; inset: 0; z-index: 8;
+    display: flex; background: #0b0b0f; color: #e8e8ee;
+    padding: 18px; gap: 18px;
+  }
+  #pr-left {
+    flex: 0 0 56%; display: flex; flex-direction: column;
+    gap: 8px; min-width: 0;
+  }
+  .pr-label { font-size: 13px; color: #77777f; }
+  .pr-viewport {
+    overflow: hidden; border-radius: 6px;
+    box-shadow: 0 0 0 1px #26262f; align-self: flex-start;
+  }
+  .pr-frame {
+    width: 100vw; height: 56.25vw;
+    transform-origin: top left;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .pr-overlay { position: absolute; inset: 0; pointer-events: none; }
+  #pr-right {
+    flex: 1; display: flex; flex-direction: column;
+    gap: 14px; min-width: 0;
+  }
+  #pr-topline {
+    display: flex; align-items: baseline; gap: 18px;
+  }
+  #pr-timer { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #pr-page { font-size: 18px; color: #9aa0a6; }
+  #pr-notes {
+    flex: 1; overflow-y: auto;
+    background: #131318; border: 1px solid #26262f; border-radius: 10px;
+    padding: 16px 18px; font-size: 22px; line-height: 1.8; white-space: pre-wrap;
+  }
+  #pr-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  #pr-buttons button {
+    font: inherit; font-size: 16px; color: #f5f5f5;
+    background: #23232e; border: 1px solid #3a3a4a; border-radius: 8px;
+    padding: 12px 18px; cursor: pointer;
+  }
+  #pr-buttons button:hover { background: #2e2e3c; }
+  #pr-buttons button.active { background: #6c9ef8; color: #0b0b0f; }
+  .keys-hint { font-size: 12.5px; color: #77777f; }
+
+  #stage-wait {
+    position: fixed; inset: 0; z-index: 7;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #000; color: #9aa0a6; font-size: 24px; text-align: center; line-height: 2;
+  }
+
   #toast {
     position: fixed; top: 4vh; left: 50%; transform: translateX(-50%);
     background: #c0392b; color: #fff;
@@ -277,6 +328,7 @@
 <section id="editor" hidden>
   <div id="editor-bar">
     <button id="ed-play">▶ 播放</button>
+    <button id="ed-present" title="開觀眾視窗（拿去錄影），這個視窗變講者台">🎤 講者</button>
     <button id="ed-save">儲存 .md</button>
     <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
     <button id="ed-home">首頁</button>
@@ -319,6 +371,39 @@
     </div>
   </div>
 </section>
+
+<section id="presenter" hidden>
+  <div id="pr-left">
+    <div class="pr-label">目前這頁</div>
+    <div class="pr-viewport" id="pr-cur-vp">
+      <div class="pr-frame" id="pr-cur-frame">
+        <div class="deck-slide slide-scope" id="pr-cur-content"></div>
+        <div class="slide-scope pr-overlay" id="pr-cur-overlay"></div>
+      </div>
+    </div>
+    <div class="pr-label">下一頁</div>
+    <div class="pr-viewport" id="pr-next-vp">
+      <div class="pr-frame" id="pr-next-frame">
+        <div class="deck-slide slide-scope" id="pr-next-content"></div>
+        <div class="slide-scope pr-overlay" id="pr-next-overlay"></div>
+      </div>
+    </div>
+  </div>
+  <div id="pr-right">
+    <div id="pr-topline"><span id="pr-timer">00:00</span><span id="pr-page"></span></div>
+    <div id="pr-notes"></div>
+    <div id="pr-buttons">
+      <button id="pr-prev">◀ 上一頁</button>
+      <button id="pr-next">下一頁 ▶</button>
+      <button id="pr-draw">畫筆 D</button>
+      <button id="pr-clearink">清筆跡 X</button>
+      <button id="pr-exit">結束 Esc</button>
+    </div>
+    <p class="keys-hint">←/→/空白鍵 翻頁（兩視窗同步）· 畫筆在觀眾視窗上動手畫</p>
+  </div>
+</section>
+
+<div id="stage-wait" hidden>等待講者視窗連線…<br><small>（回到另一個視窗按「🎤 講者」）</small></div>
 
 <div id="toast" hidden></div>
 <input id="file-input" type="file" accept=".md,.markdown,.txt" hidden>
@@ -653,7 +738,10 @@ const SimpptParser = (() => {
     lastModified: 0,
     pollTimer: null,
     showNotes: false,
+    remoteBlobs: null,
   }
+
+  const ROLE = new URLSearchParams(location.search).get('role')
 
   let toastTimer = null
   const showToast = (msg) => {
@@ -687,6 +775,13 @@ const SimpptParser = (() => {
     const hit = state.fileMap.has(full)
       ? { key: full, file: state.fileMap.get(full) }
       : findByBasename(src)
+    if (!hit && state.remoteBlobs) {
+      const base = src.split('/').pop()
+      const key = state.remoteBlobs.has(full)
+        ? full
+        : [...state.remoteBlobs.keys()].find((k) => k.split('/').pop() === base)
+      if (key) return state.remoteBlobs.get(key)
+    }
     if (!hit) return state.deckBaseUrl ? state.deckBaseUrl + src : src
     if (!state.blobUrls.has(hit.key)) state.blobUrls.set(hit.key, URL.createObjectURL(hit.file))
     return state.blobUrls.get(hit.key)
@@ -1801,7 +1896,7 @@ const SimpptParser = (() => {
     if (!editor.hidden || !state.deck || stage.hidden) return
     const key = e.key
     if (key === 'e' || key === 'E') {
-      exitPlay()
+      if (ROLE !== 'stage') exitPlay()
       return
     }
     if (key === 'Escape') {
@@ -1809,7 +1904,7 @@ const SimpptParser = (() => {
         setDrawMode(false)
         return
       }
-      if (!document.fullscreenElement) exitPlay()
+      if (!document.fullscreenElement && ROLE !== 'stage') exitPlay()
       return
     }
     if (key === 'd' || key === 'D') {
@@ -1852,6 +1947,208 @@ const SimpptParser = (() => {
   })
 
   document.getElementById('exit-play').addEventListener('click', exitPlay)
+
+  // --- 講者模式：BroadcastChannel 雙視窗同步 ---
+
+  const presenter = document.getElementById('presenter')
+  const stageWait = document.getElementById('stage-wait')
+  const prCurVp = document.getElementById('pr-cur-vp')
+  const prCurFrame = document.getElementById('pr-cur-frame')
+  const prCurContent = document.getElementById('pr-cur-content')
+  const prCurOverlay = document.getElementById('pr-cur-overlay')
+  const prNextVp = document.getElementById('pr-next-vp')
+  const prNextFrame = document.getElementById('pr-next-frame')
+  const prNextContent = document.getElementById('pr-next-content')
+  const prNextOverlay = document.getElementById('pr-next-overlay')
+  const prTimer = document.getElementById('pr-timer')
+  const prPage = document.getElementById('pr-page')
+  const prNotes = document.getElementById('pr-notes')
+  const prDrawBtn = document.getElementById('pr-draw')
+
+  const channel = 'BroadcastChannel' in window ? new BroadcastChannel('simppt') : null
+  let pIdx = 0
+  let prTimerId = null
+  let prStartTs = 0
+  let prDrawOn = false
+
+  const renderInto = (frame, content, overlay, deck, idx) => {
+    const slide = deck.slides[idx]
+    if (!slide) {
+      frame.style.background = '#000'
+      content.innerHTML = ''
+      overlay.innerHTML = ''
+      return
+    }
+    const meta = { ...deck.globals, ...slide.meta }
+    frame.style.background = meta.bg || DEFAULT_BG
+    frame.style.color = meta.color || DEFAULT_COLOR
+    frame.style.setProperty('--accent', meta.accent || 'inherit')
+    content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
+    overlay.innerHTML = ''
+    for (const el of [...content.querySelectorAll('.img-abs, .txt-abs')]) overlay.appendChild(el)
+    applyLayout(content, meta.layout)
+    applyWidth(content, meta.width)
+  }
+
+  const fitFrameTo = (viewport, frame, maxW, maxH) => {
+    const scale = Math.max(0.02, Math.min(maxW / window.innerWidth, maxH / (window.innerWidth * 0.5625)))
+    viewport.style.width = `${window.innerWidth * scale}px`
+    viewport.style.height = `${window.innerWidth * 0.5625 * scale}px`
+    frame.style.transform = `scale(${scale})`
+  }
+
+  const fitPresenter = () => {
+    const availW = presenter.clientWidth * 0.56 - 36
+    const availH = presenter.clientHeight - 90
+    fitFrameTo(prCurVp, prCurFrame, availW, availH * 0.62)
+    fitFrameTo(prNextVp, prNextFrame, availW * 0.55, availH * 0.3)
+  }
+
+  const renderPresenter = () => {
+    const slide = state.deck.slides[pIdx]
+    renderInto(prCurFrame, prCurContent, prCurOverlay, state.deck, pIdx)
+    renderInto(prNextFrame, prNextContent, prNextOverlay, state.deck, pIdx + 1)
+    prPage.textContent = `${pIdx + 1} / ${state.deck.slides.length}`
+    prNotes.textContent = (slide && slide.notes) || '（這頁沒有 note: 演講稿）'
+  }
+
+  const broadcastDeck = () => {
+    if (!channel) return
+    const blobMap = {}
+    for (const key of state.fileMap.keys()) {
+      if (!state.blobUrls.has(key)) state.blobUrls.set(key, URL.createObjectURL(state.fileMap.get(key)))
+      blobMap[key] = state.blobUrls.get(key)
+    }
+    const baseUrl = state.deckBaseUrl
+      || (state.deckUrl && state.deckUrl.includes('/')
+        ? state.deckUrl.slice(0, state.deckUrl.lastIndexOf('/') + 1)
+        : '')
+    channel.postMessage({
+      type: 'deck',
+      text: state.sourceText,
+      index: pIdx,
+      mdPath: state.mdPath,
+      baseUrl,
+      blobMap,
+    })
+  }
+
+  const prGoTo = (index) => {
+    if (!state.deck) return
+    pIdx = Math.max(0, Math.min(index, state.deck.slides.length - 1))
+    renderPresenter()
+    if (channel) channel.postMessage({ type: 'goto', index: pIdx })
+  }
+
+  const setRemoteDraw = (on) => {
+    prDrawOn = on
+    prDrawBtn.classList.toggle('active', on)
+    if (channel) channel.postMessage({ type: 'draw', on })
+  }
+
+  const startPresenter = () => {
+    if (!channel) {
+      showToast('此瀏覽器不支援 BroadcastChannel，無法用講者模式')
+      return
+    }
+    const text = editor.hidden ? state.sourceText : edText.value
+    const deck = SimpptParser.parse(text)
+    if (deck.slides.length === 0) {
+      showToast('目前內容解析不出任何頁面')
+      return
+    }
+    stopTimer()
+    state.deck = deck
+    state.sourceText = text
+    const target = deck.slides.findIndex((s) => s.raw >= previewIdx)
+    pIdx = target >= 0 ? target : 0
+    landing.hidden = true
+    editor.hidden = true
+    stage.hidden = true
+    presenter.hidden = false
+    document.title = 'simppt — 講者台'
+    window.open(`${location.pathname}?role=stage`, 'simppt-stage')
+    fitPresenter()
+    renderPresenter()
+    broadcastDeck()
+    setRemoteDraw(false)
+    prStartTs = Date.now()
+    clearInterval(prTimerId)
+    prTimerId = setInterval(() => {
+      const sec = Math.floor((Date.now() - prStartTs) / 1000)
+      const mm = String(Math.floor(sec / 60)).padStart(2, '0')
+      const ss = String(sec % 60).padStart(2, '0')
+      prTimer.textContent = `${mm}:${ss}`
+    }, 1000)
+    prTimer.textContent = '00:00'
+  }
+
+  const exitPresenter = () => {
+    clearInterval(prTimerId)
+    setRemoteDraw(false)
+    presenter.hidden = true
+    enterEditor(state.sourceText)
+  }
+
+  document.getElementById('ed-present').addEventListener('click', startPresenter)
+  document.getElementById('pr-prev').addEventListener('click', () => prGoTo(pIdx - 1))
+  document.getElementById('pr-next').addEventListener('click', () => prGoTo(pIdx + 1))
+  document.getElementById('pr-exit').addEventListener('click', exitPresenter)
+  prDrawBtn.addEventListener('click', () => setRemoteDraw(!prDrawOn))
+  document.getElementById('pr-clearink').addEventListener('click', () => {
+    if (channel) channel.postMessage({ type: 'clearInk' })
+  })
+
+  document.addEventListener('keydown', (e) => {
+    if (presenter.hidden) return
+    const key = e.key
+    if (key === 'ArrowRight' || key === 'ArrowDown' || key === ' ' || key === 'PageDown') {
+      e.preventDefault()
+      prGoTo(pIdx + 1)
+    } else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp') {
+      e.preventDefault()
+      prGoTo(pIdx - 1)
+    } else if (key === 'Home') {
+      prGoTo(0)
+    } else if (key === 'End') {
+      prGoTo(state.deck.slides.length - 1)
+    } else if (key === 'd' || key === 'D') {
+      setRemoteDraw(!prDrawOn)
+    } else if (key === 'x' || key === 'X') {
+      if (channel) channel.postMessage({ type: 'clearInk' })
+    } else if (key === 'Escape') {
+      exitPresenter()
+    }
+  })
+
+  window.addEventListener('resize', () => {
+    if (!presenter.hidden) {
+      fitPresenter()
+      renderPresenter()
+    }
+  })
+
+  if (channel) {
+    channel.onmessage = (e) => {
+      const msg = e.data || {}
+      if (ROLE === 'stage') {
+        if (msg.type === 'deck') {
+          state.remoteBlobs = new Map(Object.entries(msg.blobMap || {}))
+          stageWait.hidden = true
+          state.index = msg.index || 0
+          loadDeck(msg.text, msg.mdPath || '簡報', new Map(), msg.baseUrl || '')
+        } else if (msg.type === 'goto' && state.deck) {
+          goTo(msg.index)
+        } else if (msg.type === 'draw') {
+          setDrawMode(!!msg.on)
+        } else if (msg.type === 'clearInk') {
+          clearInk()
+        }
+      } else if (msg.type === 'hello' && !presenter.hidden) {
+        broadcastDeck()
+      }
+    }
+  }
 
   // --- 會話保存：重整後留在原地 ---
 
@@ -1897,6 +2194,7 @@ const SimpptParser = (() => {
   }
 
   const saveSession = () => {
+    if (ROLE === 'stage') return
     const view = !editor.hidden ? 'editor' : (!stage.hidden ? 'play' : 'landing')
     if (view === 'play' && state.deckUrl) return
     const session = {
@@ -2013,6 +2311,13 @@ const SimpptParser = (() => {
   }
 
   const boot = async () => {
+    if (ROLE === 'stage') {
+      landing.hidden = true
+      stageWait.hidden = false
+      document.title = 'simppt — 觀眾視窗'
+      if (channel) channel.postMessage({ type: 'hello' })
+      return
+    }
     const deckParam = /^https?:$/.test(location.protocol)
       ? new URLSearchParams(location.search).get('deck')
       : null
