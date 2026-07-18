@@ -134,14 +134,16 @@
   #ed-overlay > * { pointer-events: auto; }
   #ed-frame img { -webkit-user-drag: none; }
   #ed-frame .slide-scope > *, #ed-frame #ed-overlay > * { cursor: move; user-select: none; }
+  #ed-frame .slide-scope > *:not(.txt-abs):not(.img-abs):not(.gap) { position: relative; }
+  #ed-frame .slide-scope > *:hover { outline: 1px dashed rgba(108, 158, 248, 0.55); }
   #ed-overlay > *:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); }
   .img-handle {
     position: absolute; right: -0.8vw; bottom: -0.8vw;
     width: 1.6vw; height: 1.6vw;
     background: #6c9ef8; border-radius: 0.3vw;
-    cursor: nwse-resize; opacity: 0;
+    cursor: nwse-resize; opacity: 0; z-index: 3;
   }
-  #ed-overlay > *:hover .img-handle { opacity: 1; }
+  #ed-frame *:hover > .img-handle, .block-selected > .img-handle { opacity: 1; }
 
   #editor {
     position: fixed; inset: 0;
@@ -531,12 +533,13 @@ const SimpptParser = (() => {
       const x = parseFloat(b.attrs && b.attrs.x)
       const y = parseFloat(b.attrs && b.attrs.y)
       const w = parseFloat(b.attrs && b.attrs.w)
-      const tag = `<img src="${escapeHtml(resolveSrc(b.src))}" alt="${escapeHtml(b.alt)}">`
       if (Number.isFinite(x) && Number.isFinite(y)) {
         const width = Number.isFinite(w) ? w : 30
-        return `<figure class="img-abs" style="left:${x}%;top:${y}%;width:${width}%">${tag}</figure>`
+        return `<figure class="img-abs" style="left:${x}%;top:${y}%;width:${width}%">`
+          + `<img src="${escapeHtml(resolveSrc(b.src))}" alt="${escapeHtml(b.alt)}"></figure>`
       }
-      return `<figure>${tag}</figure>`
+      const sizeAttr = Number.isFinite(w) ? ` style="width:${w}vw"` : ''
+      return `<figure><img src="${escapeHtml(resolveSrc(b.src))}" alt="${escapeHtml(b.alt)}"${sizeAttr}></figure>`
     }
     const abs = textStyleAttr(b.attrs)
     if (b.type === 'h') return `<h${b.level}${abs}>${inline(escapeHtml(b.text))}</h${b.level}>`
@@ -946,6 +949,7 @@ const SimpptParser = (() => {
   let previewIdx = 0
 
   const attachHandle = (fig) => {
+    if (fig.querySelector(':scope > .img-handle')) return
     const handle = document.createElement('span')
     handle.className = 'img-handle'
     fig.appendChild(handle)
@@ -965,8 +969,9 @@ const SimpptParser = (() => {
     edContent.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
     previewBlocks = [...edContent.children]
     edOverlay.innerHTML = ''
-    for (const el of previewBlocks.filter((b) => b.classList.contains('img-abs') || b.classList.contains('txt-abs'))) {
-      edOverlay.appendChild(el)
+    for (const el of previewBlocks) {
+      if (el.classList.contains('gap')) continue
+      if (el.classList.contains('img-abs') || el.classList.contains('txt-abs')) edOverlay.appendChild(el)
       attachHandle(el)
     }
     applyLayout(edContent, meta.layout)
@@ -1270,19 +1275,22 @@ const SimpptParser = (() => {
     const k = previewBlocks.indexOf(el)
     if (k < 0) return
     e.preventDefault()
+    const frameRect = edFrame.getBoundingClientRect()
+    const isImg = el.tagName === 'FIGURE'
+    const isAbs = el.classList.contains('img-abs') || el.classList.contains('txt-abs')
+    const flowImg = isImg && !isAbs ? el.querySelector('img') : null
     dragCtx = {
-      el, k,
+      el, k, frameRect, isImg, isAbs,
       additive: e.shiftKey || e.ctrlKey,
       mode: e.target.closest('.img-handle') ? 'resize' : 'move',
-      frameRect: edFrame.getBoundingClientRect(),
-      isImg: el.tagName === 'FIGURE',
-      isAbs: el.classList.contains('img-abs') || el.classList.contains('txt-abs'),
       moved: false,
       startX: e.clientX,
       startY: e.clientY,
       x: parseFloat(el.style.left) || 0,
       y: parseFloat(el.style.top) || 0,
-      w: parseFloat(el.style.width) || 0,
+      w: isAbs
+        ? parseFloat(el.style.width) || 0
+        : (flowImg ? (flowImg.getBoundingClientRect().width / frameRect.width) * 100 : 0),
       s: (parseFloat(el.style.getPropertyValue('--ts')) || 1) * 100,
     }
   })
@@ -1303,7 +1311,7 @@ const SimpptParser = (() => {
     if (!dragCtx.moved) {
       if (Math.hypot(e.clientX - dragCtx.startX, e.clientY - dragCtx.startY) < 4) return
       dragCtx.moved = true
-      if (!dragCtx.isAbs) {
+      if (!dragCtx.isAbs && dragCtx.mode === 'move') {
         convertToAbs(dragCtx.el, dragCtx.isImg, dragCtx.frameRect)
         dragCtx.isAbs = true
         dragCtx.x = parseFloat(dragCtx.el.style.left) || 0
@@ -1316,7 +1324,9 @@ const SimpptParser = (() => {
     const dy = ((e.clientY - dragCtx.startY) / frameRect.height) * 100
     if (dragCtx.mode === 'resize') {
       if (dragCtx.isImg) {
-        el.style.width = `${Math.max(3, dragCtx.w + dx).toFixed(1)}%`
+        const width = Math.max(3, dragCtx.w + dx).toFixed(1)
+        if (dragCtx.isAbs) el.style.width = `${width}%`
+        else el.querySelector('img').style.width = `${width}vw`
       } else {
         const s = Math.min(400, Math.max(20, dragCtx.s + dx * 2))
         el.style.setProperty('--ts', (s / 100).toFixed(3))
@@ -1337,12 +1347,12 @@ const SimpptParser = (() => {
       snapY = 50 - bh / 2
       guideH.style.top = '50%'
     }
-    for (const other of edOverlay.children) {
-      if (other === el || other.classList.contains('img-handle')) continue
-      const ox = parseFloat(other.style.left)
-      const oy = parseFloat(other.style.top)
-      if (!Number.isFinite(ox) || !Number.isFinite(oy)) continue
+    for (const other of previewBlocks) {
+      if (other === el || !other.matches || !other.matches(BLOCK_SELECTOR)) continue
       const or = other.getBoundingClientRect()
+      if (or.width === 0 && or.height === 0) continue
+      const ox = ((or.left - frameRect.left) / frameRect.width) * 100
+      const oy = ((or.top - frameRect.top) / frameRect.height) * 100
       const ocx = ox + ((or.width / frameRect.width) * 100) / 2
       if (snapX === null && Math.abs(proposed.x - ox) < SNAP) {
         snapX = ox
@@ -1373,8 +1383,13 @@ const SimpptParser = (() => {
       return
     }
     if (mode === 'resize') {
-      if (isImg) writeBlockAttrs(k, { w: parseFloat(el.style.width).toFixed(1) })
-      else writeBlockAttrs(k, { s: String(Math.round((parseFloat(el.style.getPropertyValue('--ts')) || 1) * 100)) })
+      if (isImg) {
+        const img = el.querySelector('img')
+        const width = parseFloat(el.style.width) || (img && parseFloat(img.style.width))
+        if (Number.isFinite(width)) writeBlockAttrs(k, { w: width.toFixed(1) })
+      } else {
+        writeBlockAttrs(k, { s: String(Math.round((parseFloat(el.style.getPropertyValue('--ts')) || 1) * 100)) })
+      }
       return
     }
     const pos = {

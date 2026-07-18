@@ -151,9 +151,9 @@ test('image with {x= y= w=} renders absolutely positioned figure', () => {
   assert.equal(out, '<figure class="img-abs" style="left:10%;top:20.5%;width:30%"><img src="a.png" alt="p"></figure>')
 })
 
-test('image attrs without x/y falls back to flow figure', () => {
+test('image w= without x/y stays in flow but applies width', () => {
   const out = renderMarkdown('![p](a.png){w=30}')
-  assert.equal(out, '<figure><img src="a.png" alt="p"></figure>')
+  assert.equal(out, '<figure><img src="a.png" alt="p" style="width:30vw"></figure>')
 })
 
 test('IMG_RE matches plain and attributed image lines', () => {
