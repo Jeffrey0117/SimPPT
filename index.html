@@ -60,7 +60,7 @@
     user-select: none;
   }
   .deck-slide {
-    max-width: 84vw; max-height: 88vh;
+    max-width: var(--cw, 84vw); max-height: 88vh;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 2.5vh; text-align: center; overflow: hidden;
@@ -79,14 +79,14 @@
   .slide-scope a { color: inherit; text-decoration: underline; }
   .slide-scope strong { color: var(--accent, inherit); }
   .deck-slide.layout-top {
-    width: 84vw; height: 49.5vw; max-height: none;
+    width: var(--cw, 84vw); height: 49.5vw; max-height: none;
     align-items: flex-start; justify-content: flex-start;
     text-align: left; gap: 2.5vw; padding-top: 4.5vw;
   }
   .deck-slide.layout-top h1 { font-size: 4.6vw; }
-  .deck-slide.layout-top p { font-size: 2.4vw; line-height: 1.75; max-width: 70vw; }
+  .deck-slide.layout-top p { font-size: 2.4vw; line-height: 1.75; }
   .deck-slide.layout-split {
-    width: 84vw; height: 49.5vw; max-height: none;
+    width: var(--cw, 84vw); height: 49.5vw; max-height: none;
     flex-direction: column; align-items: flex-start; justify-content: flex-start;
     gap: 2.8vw; text-align: left; padding-top: 4.5vw;
   }
@@ -112,7 +112,7 @@
 
   .txt-abs {
     position: absolute; margin: 0;
-    transform-origin: top left; max-width: 90%;
+    transform-origin: top left; max-width: 94%;
     text-align: left;
   }
   .img-abs { position: absolute; margin: 0; }
@@ -577,6 +577,12 @@ const SimpptParser = (() => {
 
   const LAYOUTS = ['top', 'split']
 
+  const applyWidth = (container, width) => {
+    const w = parseFloat(width)
+    if (Number.isFinite(w) && w > 0) container.style.setProperty('--cw', `${Math.min(w, 100)}vw`)
+    else container.style.removeProperty('--cw')
+  }
+
   const applyLayout = (container, layout) => {
     container.className = `deck-slide slide-scope${LAYOUTS.includes(layout) ? ` layout-${layout}` : ''}`
     if (layout !== 'split') return
@@ -606,6 +612,7 @@ const SimpptParser = (() => {
     stageOverlay.innerHTML = ''
     for (const el of [...content.querySelectorAll('.img-abs, .txt-abs')]) stageOverlay.appendChild(el)
     applyLayout(content, meta.layout)
+    applyWidth(content, meta.width)
     indicator.textContent = `${state.index + 1} / ${state.deck.slides.length}`
   }
 
@@ -889,6 +896,7 @@ const SimpptParser = (() => {
       attachHandle(el)
     }
     applyLayout(edContent, meta.layout)
+    applyWidth(edContent, meta.width)
     edPageInfo.textContent = deck.slides.length > 0 ? `第 ${idx + 1} / ${deck.slides.length} 頁` : ''
   }
 
