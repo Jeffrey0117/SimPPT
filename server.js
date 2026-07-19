@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 4646
+const TOKEN = process.env.SIMPPT_TOKEN || ''
+
+const authorized = (req) => !TOKEN || req.headers['x-simppt-token'] === TOKEN
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -24,6 +27,11 @@ const MIME = {
 const server = http.createServer((req, res) => {
   try {
     const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+    if (req.method === 'POST' && (urlPath === '/__upload' || urlPath === '/__save') && !authorized(req)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end('{"status":"error","message":"unauthorized"}')
+      return
+    }
     if (req.method === 'POST' && urlPath === '/__upload') {
       const chunks = []
       req.on('data', (chunk) => chunks.push(chunk))

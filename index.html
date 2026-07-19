@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>simppt</title>
+<title>SimPPT</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236c9ef8'/%3E%3Cstop offset='1' stop-color='%23e94560'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='10' width='56' height='44' rx='9' fill='url(%23g)'/%3E%3Crect x='12' y='22' width='26' height='7' rx='3.5' fill='%23ffffff'/%3E%3Crect x='12' y='36' width='36' height='4' rx='2' fill='%23ffffffb3'/%3E%3Crect x='12' y='44' width='28' height='4' rx='2' fill='%23ffffffb3'/%3E%3C/svg%3E">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -327,7 +327,7 @@
 <body>
 
 <main id="landing">
-  <h1>simppt</h1>
+  <h1>SimPPT</h1>
   <p class="hint">
     「開啟檔案／資料夾」會進<strong>編輯器</strong>（左寫右預覽）；<br>
     拖入 .md 或資料夾則<strong>直接播放</strong>。
@@ -445,7 +445,7 @@ bg: #1a1a2e
 color: #ffffff
 ---
 
-# simppt
+# SimPPT
 
 超簡單的 Markdown 簡報
 
@@ -774,6 +774,24 @@ const SimpptParser = (() => {
 
   const ROLE = new URLSearchParams(location.search).get('role')
 
+  const tokenParam = new URLSearchParams(location.search).get('token')
+  if (tokenParam) {
+    try {
+      localStorage.setItem('simppt-token', tokenParam)
+    } catch {
+      // 存不了就每次帶網址參數
+    }
+  }
+
+  const apiHeaders = () => {
+    try {
+      const token = localStorage.getItem('simppt-token') || tokenParam || ''
+      return token ? { 'X-Simppt-Token': token } : {}
+    } catch {
+      return tokenParam ? { 'X-Simppt-Token': tokenParam } : {}
+    }
+  }
+
   let toastTimer = null
   const showToast = (msg) => {
     toast.textContent = msg
@@ -1066,7 +1084,7 @@ const SimpptParser = (() => {
     state.index = Math.min(state.index, deck.slides.length - 1)
     landing.hidden = true
     stage.hidden = false
-    document.title = `simppt — ${mdPath.split('/').pop()}`
+    document.title = `SimPPT — ${mdPath.split('/').pop()}`
     renderSlide()
     scheduleSave()
     return true
@@ -1431,13 +1449,13 @@ const SimpptParser = (() => {
     try {
       const res = await fetch('/__save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...apiHeaders() },
         body: JSON.stringify({ path: rel, text }),
       })
       if (!res.ok) return false
       state.mdPath = rel
       state.deckUrl = rel
-      document.title = `simppt — ${rel.split('/').pop()}`
+      document.title = `SimPPT — ${rel.split('/').pop()}`
       return true
     } catch {
       return false
@@ -1450,7 +1468,7 @@ const SimpptParser = (() => {
       if (state.deckUrl) {
         const res = await fetch('/__save', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...apiHeaders() },
           body: JSON.stringify({ path: state.deckUrl, text }),
         })
         if (!res.ok) throw new Error(`server save ${res.status}`)
@@ -1972,7 +1990,7 @@ const SimpptParser = (() => {
     editor.hidden = true
     stage.hidden = true
     landing.hidden = false
-    document.title = 'simppt'
+    document.title = 'SimPPT'
   })
 
   edText.addEventListener('input', () => {
@@ -1991,6 +2009,7 @@ const SimpptParser = (() => {
         headers: {
           'Content-Type': file.type || 'application/octet-stream',
           'X-Filename': encodeURIComponent(file.name || 'paste.png'),
+          ...apiHeaders(),
         },
         body: file,
       })
@@ -2291,7 +2310,7 @@ const SimpptParser = (() => {
     editor.hidden = true
     stage.hidden = true
     presenter.hidden = false
-    document.title = 'simppt — 講者台'
+    document.title = 'SimPPT — 講者台'
     window.open(`${location.pathname}?role=stage`, 'simppt-stage')
     fitPresenter()
     renderPresenter()
@@ -2557,7 +2576,7 @@ const SimpptParser = (() => {
     if (ROLE === 'stage') {
       landing.hidden = true
       stageWait.hidden = false
-      document.title = 'simppt — 觀眾視窗'
+      document.title = 'SimPPT — 觀眾視窗'
       if (channel) channel.postMessage({ type: 'hello' })
       return
     }

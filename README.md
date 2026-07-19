@@ -1,4 +1,4 @@
-# simppt
+# SimPPT
 
 超簡單的 Markdown 簡報播放器 — **一個零依賴的 `index.html`，雙擊就能用**。
 
