@@ -193,6 +193,24 @@
     background: #16161d; border: 1px solid #26262f; border-radius: 8px;
     padding: 6px 10px;
   }
+  #find-bar {
+    position: absolute; top: 10px; left: 10px; z-index: 10;
+    display: flex; align-items: center; gap: 6px;
+    background: #16161d; border: 1px solid #26262f; border-radius: 8px;
+    padding: 6px 8px;
+  }
+  #find-bar input {
+    font: inherit; font-size: 13.5px; color: #e8e8ee;
+    background: #0e0e12; border: 1px solid #2a2a35; border-radius: 6px;
+    padding: 5px 8px; width: 140px;
+  }
+  #find-bar button {
+    font: inherit; font-size: 13px; color: #f5f5f5;
+    background: #23232e; border: 1px solid #3a3a4a; border-radius: 6px;
+    padding: 5px 9px; cursor: pointer;
+  }
+  #find-bar button:hover { background: #2e2e3c; }
+  #find-count { font-size: 12.5px; color: #9aa0a6; min-width: 42px; text-align: center; }
   #ed-tools { top: 8px; left: 50%; transform: translateX(-50%); }
   #txt-tools { top: 8px; left: 14px; }
   .mini-tools button {
@@ -404,10 +422,20 @@
     <button id="ed-save">儲存 .md</button>
     <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
     <button id="ed-ai-revise" title="跟 AI 說要怎麼調整這份簡報">AI 編輯</button>
+    <button id="ed-find" title="搜尋並取代（Ctrl+H）">🔍 取代</button>
     <button id="ed-home">首頁</button>
     <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
   </div>
   <div id="editor-body">
+    <div id="find-bar" hidden>
+      <input type="text" id="find-query" placeholder="搜尋…">
+      <input type="text" id="find-replacement" placeholder="取代成…">
+      <button id="find-prev" title="上一個">↑</button>
+      <button id="find-next" title="下一個">↓</button>
+      <button id="find-replace-all">全部取代</button>
+      <span id="find-count">0/0</span>
+      <button id="find-close" title="關閉（Esc）">✕</button>
+    </div>
     <div id="txt-tools" class="mini-tools" hidden>
       <button data-act="bold" title="加粗選取的字（**粗體**）"><strong>B</strong></button>
       <button data-act="smaller" title="縮小選取的字">A−</button>
@@ -837,6 +865,17 @@ const FindReplace = (() => {
   const genCancelBtn = document.getElementById('gen-cancel')
   const genSubmitBtn = document.getElementById('gen-submit')
   let genMode = 'create'
+  const edFindBtn = document.getElementById('ed-find')
+  const findBar = document.getElementById('find-bar')
+  const findQueryInput = document.getElementById('find-query')
+  const findReplacementInput = document.getElementById('find-replacement')
+  const findPrevBtn = document.getElementById('find-prev')
+  const findNextBtn = document.getElementById('find-next')
+  const findReplaceAllBtn = document.getElementById('find-replace-all')
+  const findCount = document.getElementById('find-count')
+  const findCloseBtn = document.getElementById('find-close')
+  let findMatches = []
+  let findCurrent = 0
 
   const MD_RE = /\.(md|markdown)$/i
   const DEFAULT_BG = '#101014'
@@ -2107,6 +2146,84 @@ const FindReplace = (() => {
     }
   })
 
+  const updateFindCount = () => {
+    findCount.textContent = findMatches.length ? `${findCurrent + 1}/${findMatches.length}` : '0/0'
+  }
+
+  const selectFindMatch = () => {
+    if (findMatches.length === 0) return
+    const start = findMatches[findCurrent]
+    const len = findQueryInput.value.length
+    edText.focus()
+    edText.setSelectionRange(start, start + len)
+    const lineHeight = parseFloat(getComputedStyle(edText).lineHeight) || 22
+    const linesBefore = edText.value.slice(0, start).split('\n').length - 1
+    edText.scrollTop = Math.max(0, linesBefore * lineHeight - edText.clientHeight / 2)
+  }
+
+  const recomputeFindMatches = () => {
+    findMatches = FindReplace.findAllMatches(edText.value, findQueryInput.value)
+    findCurrent = 0
+    updateFindCount()
+    selectFindMatch()
+  }
+
+  const openFindBar = () => {
+    findBar.hidden = false
+    findQueryInput.focus()
+    findQueryInput.select()
+    recomputeFindMatches()
+  }
+
+  const closeFindBar = () => {
+    findBar.hidden = true
+    edText.focus()
+  }
+
+  edFindBtn.addEventListener('click', openFindBar)
+  findCloseBtn.addEventListener('click', closeFindBar)
+  findQueryInput.addEventListener('input', recomputeFindMatches)
+
+  findQueryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (e.shiftKey) findPrevBtn.click()
+      else findNextBtn.click()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      closeFindBar()
+    }
+  })
+
+  findReplacementInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      closeFindBar()
+    }
+  })
+
+  findPrevBtn.addEventListener('click', () => {
+    if (findMatches.length === 0) return
+    findCurrent = (findCurrent - 1 + findMatches.length) % findMatches.length
+    updateFindCount()
+    selectFindMatch()
+  })
+
+  findNextBtn.addEventListener('click', () => {
+    if (findMatches.length === 0) return
+    findCurrent = (findCurrent + 1) % findMatches.length
+    updateFindCount()
+    selectFindMatch()
+  })
+
+  findReplaceAllBtn.addEventListener('click', () => {
+    const query = findQueryInput.value
+    if (!query) return
+    edText.value = FindReplace.replaceAllCaseInsensitive(edText.value, query, findReplacementInput.value)
+    edText.dispatchEvent(new Event('input'))
+    recomputeFindMatches()
+  })
+
   let historyCursor = -1
   document.getElementById('open-history').addEventListener('click', () => {
     let hist = []
@@ -2231,6 +2348,9 @@ const FindReplace = (() => {
     } else if (e.code === 'KeyB' && document.activeElement === edText) {
       e.preventDefault()
       inlineBold()
+    } else if (e.code === 'KeyH' || e.key === 'h' || e.key === 'H') {
+      e.preventDefault()
+      openFindBar()
     }
   }, { capture: true })
 
