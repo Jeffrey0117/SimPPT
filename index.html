@@ -236,6 +236,7 @@
     display: flex; align-items: center; justify-content: center;
   }
   #ed-pageinfo { font-size: 15px; color: #f5f5f5; }
+  #ed-shortcuts { font-size: 12.5px; color: #77777f; }
   #ed-strip { display: flex; gap: 8px; justify-content: center; }
 
   #indicator {
@@ -424,7 +425,7 @@
     <button id="ed-ai-revise" title="跟 AI 說要怎麼調整這份簡報">AI 編輯</button>
     <button id="ed-find" title="搜尋並取代（Ctrl+H）">🔍 取代</button>
     <button id="ed-home">首頁</button>
-    <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
+    <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁 · 播放中 Esc 回編輯</span>
   </div>
   <div id="editor-body">
     <div id="find-bar" hidden>
@@ -470,6 +471,7 @@
       </div>
       <div id="ed-strip"></div>
       <div id="ed-pageinfo"></div>
+      <div id="ed-shortcuts">Ctrl+S 儲存 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁</div>
     </div>
   </div>
 </section>
@@ -1525,7 +1527,7 @@ const FindReplace = (() => {
     editor.hidden = false
     edText.value = text
     edDirty = false
-    setStatus('Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中按 E 回編輯')
+    setStatus('Ctrl+S 儲存 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁 · 播放中按 E 回編輯')
     fitPreview()
     updatePreview(true)
     edText.focus()
