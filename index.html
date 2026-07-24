@@ -375,7 +375,7 @@
 
 <div id="gen-modal" hidden>
   <div id="gen-card">
-    <h2>AI 生成簡報</h2>
+    <h2 id="gen-title">AI 生成簡報</h2>
     <textarea id="gen-text" placeholder="貼上你想做成簡報的內容…"></textarea>
     <div id="gen-error"></div>
     <div id="gen-actions">
@@ -403,6 +403,7 @@
     <button id="ed-present" title="開觀眾視窗（拿去錄影），這個視窗變講者台">🎤 講者</button>
     <button id="ed-save">儲存 .md</button>
     <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
+    <button id="ed-ai-revise" title="跟 AI 說要怎麼調整這份簡報">AI 編輯</button>
     <button id="ed-home">首頁</button>
     <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · 播放中 Esc 回編輯</span>
   </div>
@@ -791,11 +792,14 @@ const SimpptParser = (() => {
   const edPlayBtn = document.getElementById('ed-play')
   const edSaveBtn = document.getElementById('ed-save')
   const aiGenerateBtn = document.getElementById('ai-generate')
+  const edAiReviseBtn = document.getElementById('ed-ai-revise')
   const genModal = document.getElementById('gen-modal')
+  const genTitle = document.getElementById('gen-title')
   const genText = document.getElementById('gen-text')
   const genError = document.getElementById('gen-error')
   const genCancelBtn = document.getElementById('gen-cancel')
   const genSubmitBtn = document.getElementById('gen-submit')
+  let genMode = 'create'
 
   const MD_RE = /\.(md|markdown)$/i
   const DEFAULT_BG = '#101014'
@@ -2004,11 +2008,19 @@ const SimpptParser = (() => {
     enterEditor(NEW_DECK_TEMPLATE)
   })
 
-  aiGenerateBtn.addEventListener('click', () => {
+  const openGenModal = (mode) => {
+    genMode = mode
+    genTitle.textContent = mode === 'revise' ? 'AI 編輯簡報' : 'AI 生成簡報'
+    genText.placeholder = mode === 'revise' ? '跟 AI 說要怎麼調整這份簡報…' : '貼上你想做成簡報的內容…'
+    genSubmitBtn.textContent = mode === 'revise' ? '送出' : '生成'
+    genText.value = ''
     genError.textContent = ''
     genModal.hidden = false
     genText.focus()
-  })
+  }
+
+  aiGenerateBtn.addEventListener('click', () => openGenModal('create'))
+  edAiReviseBtn.addEventListener('click', () => openGenModal('revise'))
 
   genCancelBtn.addEventListener('click', () => {
     genModal.hidden = true
@@ -2017,36 +2029,44 @@ const SimpptParser = (() => {
   genSubmitBtn.addEventListener('click', async () => {
     const content = genText.value.trim()
     if (!content) {
-      genError.textContent = '請先貼一些內容'
+      genError.textContent = genMode === 'revise' ? '請先輸入修改指令' : '請先貼一些內容'
       return
     }
     genSubmitBtn.disabled = true
     genCancelBtn.disabled = true
-    genSubmitBtn.textContent = 'AI 生成中…'
+    genSubmitBtn.textContent = genMode === 'revise' ? 'AI 調整中…' : 'AI 生成中…'
     genError.textContent = ''
     try {
-      const res = await fetch('/__generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8', ...apiHeaders() },
-        body: content,
-      })
+      const res = genMode === 'revise'
+        ? await fetch('/__revise', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...apiHeaders() },
+            body: JSON.stringify({ markdown: edText.value, instruction: content }),
+          })
+        : await fetch('/__generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8', ...apiHeaders() },
+            body: content,
+          })
       const data = await res.json()
       if (!res.ok || !data.ok) {
-        genError.textContent = data.message || `生成失敗（${res.status}）`
+        genError.textContent = data.message || `失敗（${res.status}）`
         return
       }
       genModal.hidden = true
-      stopPolling()
-      state.mdPath = ''
-      state.fileMap = new Map()
-      state.sourceText = ''
+      if (genMode === 'create') {
+        stopPolling()
+        state.mdPath = ''
+        state.fileMap = new Map()
+        state.sourceText = ''
+      }
       enterEditor(data.markdown)
     } catch (err) {
       genError.textContent = `連線失敗：${err.message}`
     } finally {
       genSubmitBtn.disabled = false
       genCancelBtn.disabled = false
-      genSubmitBtn.textContent = '生成'
+      genSubmitBtn.textContent = genMode === 'revise' ? '送出' : '生成'
     }
   })
 
