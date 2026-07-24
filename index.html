@@ -763,6 +763,43 @@ const SimpptParser = (() => {
 })()
 </script>
 
+<script id="find-replace-logic">
+const FindReplace = (() => {
+  'use strict'
+
+  const findAllMatches = (text, query) => {
+    if (!query) return []
+    const hay = text.toLowerCase()
+    const needle = query.toLowerCase()
+    const matches = []
+    let from = 0
+    while (true) {
+      const idx = hay.indexOf(needle, from)
+      if (idx === -1) break
+      matches.push(idx)
+      from = idx + needle.length
+    }
+    return matches
+  }
+
+  const replaceAllCaseInsensitive = (text, query, replacement) => {
+    if (!query) return text
+    const matches = findAllMatches(text, query)
+    if (matches.length === 0) return text
+    let result = ''
+    let cursor = 0
+    for (const idx of matches) {
+      result += text.slice(cursor, idx) + replacement
+      cursor = idx + query.length
+    }
+    result += text.slice(cursor)
+    return result
+  }
+
+  return { findAllMatches, replaceAllCaseInsensitive }
+})()
+</script>
+
 <script>
 (() => {
   'use strict'
