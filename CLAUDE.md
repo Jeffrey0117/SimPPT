@@ -21,3 +21,12 @@
 - 預覽/播放/講者台三處共用同一渲染管線（`renderInto` + `.slide-scope` 字級 calc(--ts)），所有尺寸一律 vw 單位（16:9 基準），嚴禁混用 vh 否則預覽與播放不一致
 - 會話保存：localStorage `simppt-session`（僅編輯視圖寫入）+ IndexedDB 檔案 handle + `simppt-history` 快照；`?role=stage` 觀眾視窗不寫會話
 - 雙視窗同步：BroadcastChannel('simppt')
+
+## AI 協作流程慣例（superpowers skills）
+
+這是單人專案、直接在 `main` 上做，不開 feature branch/worktree。用 brainstorming → writing-plans → executing-plans 走小功能時：
+
+- **執行方式固定 inline**：不用問「subagent-driven 還是 inline」，預設 inline execution，直接跳過那個選項的詢問。
+- **spec/plan 照樣寫、照樣要走過流程**（design 段落還是要讓 Jeff 過目確認一次），但流程性的問題（要不要寫 spec、用哪種執行方式）不用問，直接做。
+- **完成後預設直接 push 到 `origin/main`**（不用每次都問要不要推）——這個 repo push 上去會觸發 CloudPipe 自動部署，但目前功能都是本機限定（`claude` CLI 相關端點），部署上去也不影響正式站。
+- 真正需要 Jeff 判斷的（設計方向、UI 呈現方式、有實質分歧的技術選擇）還是要問，不要因為這條規則就悶著頭亂猜。
