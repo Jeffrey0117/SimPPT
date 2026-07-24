@@ -321,6 +321,33 @@
     background: #c0392b; color: #fff;
     padding: 10px 22px; border-radius: 8px; font-size: 15px; z-index: 30;
   }
+  #gen-modal {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+  }
+  #gen-card {
+    width: min(640px, 90vw); max-height: 80vh;
+    display: flex; flex-direction: column; gap: 12px;
+    background: #16161c; border: 1px solid #2a2a35; border-radius: 12px;
+    padding: 20px 22px;
+  }
+  #gen-card h2 { margin: 0; font-size: 18px; }
+  #gen-text {
+    flex: 1; min-height: 240px; resize: vertical;
+    background: #0e0e12; color: #f5f5f5; border: 1px solid #2a2a35; border-radius: 8px;
+    padding: 12px; font: inherit; font-size: 14px; line-height: 1.6;
+  }
+  #gen-error { color: #e97070; font-size: 13.5px; min-height: 1.4em; }
+  #gen-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  #gen-actions button {
+    font: inherit; font-size: 14.5px; color: #f5f5f5;
+    background: #23232e; border: 1px solid #3a3a4a; border-radius: 8px;
+    padding: 10px 18px; cursor: pointer;
+  }
+  #gen-actions button:hover { background: #2e2e3c; }
+  #gen-actions button:disabled { opacity: 0.55; cursor: default; }
+  #gen-submit { background: #6c9ef8; color: #0b0b0f; border-color: #6c9ef8; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -338,12 +365,25 @@
     <button id="open-file">開啟檔案</button>
     <button id="open-dir">開啟資料夾</button>
     <button id="open-history" title="編輯內容每分鐘自動備份，最多 20 份；點一次載入最新，再點往回翻">歷史備份</button>
+    <button id="ai-generate" title="貼上內容，用本機 claude CLI 生成一份簡報">AI 生成</button>
   </div>
   <p class="keys">
     <kbd>←</kbd> <kbd>→</kbd> 翻頁 · <kbd>F</kbd> 全螢幕 · <kbd>Esc</kbd> 結束播放 ·
     <kbd>P</kbd> 頁碼 · <kbd>E</kbd> 編輯（<kbd>Ctrl+S</kbd> 存檔）
   </p>
 </main>
+
+<div id="gen-modal" hidden>
+  <div id="gen-card">
+    <h2>AI 生成簡報</h2>
+    <textarea id="gen-text" placeholder="貼上你想做成簡報的內容…"></textarea>
+    <div id="gen-error"></div>
+    <div id="gen-actions">
+      <button id="gen-cancel">取消</button>
+      <button id="gen-submit">生成</button>
+    </div>
+  </div>
+</div>
 
 <section id="stage" hidden>
   <div id="stage-frame">
@@ -750,6 +790,12 @@ const SimpptParser = (() => {
   const edStatus = document.getElementById('ed-status')
   const edPlayBtn = document.getElementById('ed-play')
   const edSaveBtn = document.getElementById('ed-save')
+  const aiGenerateBtn = document.getElementById('ai-generate')
+  const genModal = document.getElementById('gen-modal')
+  const genText = document.getElementById('gen-text')
+  const genError = document.getElementById('gen-error')
+  const genCancelBtn = document.getElementById('gen-cancel')
+  const genSubmitBtn = document.getElementById('gen-submit')
 
   const MD_RE = /\.(md|markdown)$/i
   const DEFAULT_BG = '#101014'
@@ -1956,6 +2002,52 @@ const SimpptParser = (() => {
     state.fileMap = new Map()
     state.sourceText = ''
     enterEditor(NEW_DECK_TEMPLATE)
+  })
+
+  aiGenerateBtn.addEventListener('click', () => {
+    genError.textContent = ''
+    genModal.hidden = false
+    genText.focus()
+  })
+
+  genCancelBtn.addEventListener('click', () => {
+    genModal.hidden = true
+  })
+
+  genSubmitBtn.addEventListener('click', async () => {
+    const content = genText.value.trim()
+    if (!content) {
+      genError.textContent = '請先貼一些內容'
+      return
+    }
+    genSubmitBtn.disabled = true
+    genCancelBtn.disabled = true
+    genSubmitBtn.textContent = 'AI 生成中…'
+    genError.textContent = ''
+    try {
+      const res = await fetch('/__generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', ...apiHeaders() },
+        body: content,
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        genError.textContent = data.message || `生成失敗（${res.status}）`
+        return
+      }
+      genModal.hidden = true
+      stopPolling()
+      state.mdPath = ''
+      state.fileMap = new Map()
+      state.sourceText = ''
+      enterEditor(data.markdown)
+    } catch (err) {
+      genError.textContent = `連線失敗：${err.message}`
+    } finally {
+      genSubmitBtn.disabled = false
+      genCancelBtn.disabled = false
+      genSubmitBtn.textContent = '生成'
+    }
   })
 
   let historyCursor = -1
