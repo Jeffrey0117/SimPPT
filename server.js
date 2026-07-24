@@ -2,8 +2,8 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawn } from 'node:child_process'
-import { buildGeneratePrompt } from './lib/generate-prompt.mjs'
+import { buildGeneratePrompt, buildRevisePrompt } from './lib/generate-prompt.mjs'
+import { runClaudePrint } from './lib/run-claude.mjs'
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 4646
@@ -29,7 +29,7 @@ const MIME = {
 const server = http.createServer((req, res) => {
   try {
     const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
-    if (req.method === 'POST' && (urlPath === '/__upload' || urlPath === '/__save' || urlPath === '/__generate') && !authorized(req)) {
+    if (req.method === 'POST' && (urlPath === '/__upload' || urlPath === '/__save' || urlPath === '/__generate' || urlPath === '/__revise') && !authorized(req)) {
       res.writeHead(401, { 'Content-Type': 'application/json' })
       res.end('{"status":"error","message":"unauthorized"}')
       return
@@ -86,7 +86,7 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && urlPath === '/__generate') {
       const chunks = []
       req.on('data', (chunk) => chunks.push(chunk))
-      req.on('end', () => {
+      req.on('end', async () => {
         const buf = Buffer.concat(chunks)
         if (buf.length === 0 || buf.length > 200 * 1024) {
           res.writeHead(413, { 'Content-Type': 'application/json' })
@@ -94,50 +94,49 @@ const server = http.createServer((req, res) => {
           return
         }
         const prompt = buildGeneratePrompt(buf.toString('utf8'))
-        const child = spawn('claude', ['-p'], { cwd: ROOT, shell: true })
-        let stdout = ''
-        let stderr = ''
-        let settled = false
-        const timer = setTimeout(() => {
-          if (settled) return
-          settled = true
-          child.kill()
-          res.writeHead(504, { 'Content-Type': 'application/json' })
-          res.end('{"ok":false,"message":"生成逾時（120 秒），請稍後再試"}')
-        }, 120000)
-        child.stdout.on('data', (chunk) => { stdout += chunk })
-        child.stderr.on('data', (chunk) => { stderr += chunk })
-        child.on('error', (err) => {
-          if (settled) return
-          settled = true
-          clearTimeout(timer)
-          const message = err.code === 'ENOENT'
-            ? '找不到 claude 指令，請確認本機已安裝並登入 Claude Code CLI'
-            : `啟動失敗：${err.message}`
-          res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: false, message }))
-        })
-        child.on('close', (code) => {
-          if (settled) return
-          settled = true
-          clearTimeout(timer)
-          if (code !== 0) {
-            const message = stderr.trim().split('\n').slice(0, 5).join('\n') || `claude 結束碼 ${code}`
-            res.writeHead(500, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, message }))
-            return
-          }
-          const markdown = stdout.trim()
-          if (!markdown) {
-            res.writeHead(500, { 'Content-Type': 'application/json' })
-            res.end('{"ok":false,"message":"AI 沒有回傳內容"}')
-            return
-          }
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: true, markdown }))
-        })
-        child.stdin.write(prompt)
-        child.stdin.end()
+        const result = await runClaudePrint(prompt, { cwd: ROOT })
+        if (!result.ok) {
+          res.writeHead(result.status, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, message: result.message }))
+          return
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, markdown: result.markdown }))
+      })
+      return
+    }
+    if (req.method === 'POST' && urlPath === '/__revise') {
+      let body = ''
+      req.on('data', (chunk) => { body += chunk })
+      req.on('end', async () => {
+        if (Buffer.byteLength(body, 'utf8') > 300 * 1024) {
+          res.writeHead(413, { 'Content-Type': 'application/json' })
+          res.end('{"ok":false,"message":"內容過大（上限 300KB）"}')
+          return
+        }
+        let markdown
+        let instruction
+        try {
+          ({ markdown, instruction } = JSON.parse(body))
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end('{"ok":false,"message":"請求格式錯誤"}')
+          return
+        }
+        if (typeof markdown !== 'string' || typeof instruction !== 'string' || !instruction.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end('{"ok":false,"message":"缺少 markdown 或 instruction"}')
+          return
+        }
+        const prompt = buildRevisePrompt(markdown, instruction)
+        const result = await runClaudePrint(prompt, { cwd: ROOT })
+        if (!result.ok) {
+          res.writeHead(result.status, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, message: result.message }))
+          return
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, markdown: result.markdown }))
       })
       return
     }
