@@ -279,9 +279,11 @@
   }
   #exit-play:hover { opacity: 0.9; }
 
-  /* 右下角全螢幕鈕（影片播放器式） */
+  /* 全螢幕鈕：貼在投影片本體的右下角（像影片播放器），letterbox 邊界用 16:9 幾何算 */
   #fs-toggle {
-    position: fixed; bottom: 1.8vh; right: 1.2vw; z-index: 5;
+    position: fixed; z-index: 5;
+    right: calc((100vw - min(100vw, 177.78vh)) / 2 + 0.9vw);
+    bottom: calc((100vh - min(56.25vw, 100vh)) / 2 + 0.9vw);
     display: flex; align-items: center; justify-content: center;
     background: rgba(0, 0, 0, 0.35); border: 0; border-radius: 10px;
     color: #fff; opacity: 0.25; cursor: pointer; padding: 0.55vw;
@@ -2412,6 +2414,8 @@ const FindReplace = (() => {
     if (!editor.hidden || !state.deck || stage.hidden) return
     const key = e.key
     if (key === 'e' || key === 'E') {
+      // 不 preventDefault 的話，這個按鍵會打進剛拿到焦點的編輯器 textarea 變成一個 e
+      e.preventDefault()
       if (ROLE !== 'stage') exitPlay()
       return
     }
