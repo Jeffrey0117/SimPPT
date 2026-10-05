@@ -279,6 +279,19 @@
   }
   #exit-play:hover { opacity: 0.9; }
 
+  /* 右下角全螢幕鈕（影片播放器式） */
+  #fs-toggle {
+    position: fixed; bottom: 1.8vh; right: 1.2vw; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.35); border: 0; border-radius: 10px;
+    color: #fff; opacity: 0.25; cursor: pointer; padding: 0.55vw;
+  }
+  #fs-toggle:hover { opacity: 0.95; }
+  #fs-toggle svg { width: 1.6vw; height: 1.6vw; min-width: 20px; min-height: 20px; display: block; }
+  #fs-toggle .icon-exit { display: none; }
+  #fs-toggle.is-fs .icon-enter { display: none; }
+  #fs-toggle.is-fs .icon-exit { display: block; }
+
   #presenter {
     position: fixed; inset: 0; z-index: 8;
     display: flex; background: #0b0b0f; color: #e8e8ee;
@@ -414,6 +427,10 @@
   <div id="notes-panel" hidden></div>
   <div id="indicator" hidden></div>
   <button id="exit-play" title="回編輯（Esc）">✕</button>
+  <button id="fs-toggle" title="全螢幕（F）">
+    <svg class="icon-enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    <svg class="icon-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+  </button>
 </section>
 
 <section id="editor" hidden>
@@ -2312,14 +2329,20 @@ const FindReplace = (() => {
     edDirty = true
     setStatus('圖片上傳中…')
     updatePreview(true)
+    // 原地替換，不整個重設 value — 否則游標被甩到文末，預覽跟著跳到別頁
+    const replaceKeepCaret = (needle, replacement) => {
+      const at = edText.value.indexOf(needle)
+      if (at < 0) return
+      edText.setRangeText(replacement, at, at + needle.length, 'preserve')
+    }
     try {
       const json = await uploadImage(file)
       const url = json && json.data && json.data.url_direct
       if (!url) throw new Error((json && json.message) || 'no url')
-      edText.value = edText.value.replace(placeholder, `![](${url})`)
+      replaceKeepCaret(placeholder, `![](${url})`)
       setStatus('圖片已上傳 ✓', true)
     } catch (err) {
-      edText.value = edText.value.replace(`\n${placeholder}\n`, '')
+      replaceKeepCaret(`\n${placeholder}\n`, '')
       showToast('圖片上傳失敗，再試一次或檢查網路')
       setStatus('未儲存變更')
     }
@@ -2439,8 +2462,19 @@ const FindReplace = (() => {
     if (drawMode) return
     if (e.target.closest('a')) return
     if (e.target.closest('#exit-play')) return
+    if (e.target.closest('#fs-toggle')) return
     if (e.clientX < window.innerWidth / 4) goTo(state.index - 1)
     else goTo(state.index + 1)
+  })
+
+  const fsToggle = document.getElementById('fs-toggle')
+  fsToggle.addEventListener('click', (e) => {
+    e.stopPropagation()
+    toggleFullscreen()
+  })
+  document.addEventListener('fullscreenchange', () => {
+    fsToggle.classList.toggle('is-fs', !!document.fullscreenElement)
+    fsToggle.title = document.fullscreenElement ? '離開全螢幕（F）' : '全螢幕（F）'
   })
 
   document.getElementById('exit-play').addEventListener('click', exitPlay)
