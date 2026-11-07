@@ -29,6 +29,12 @@ const MIME = {
 const server = http.createServer((req, res) => {
   try {
     const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+    // Never serve dotfiles/dirs (.env, .git/…) — the static root is the repo root.
+    if (urlPath.split(/[\\/]/).some((seg) => seg.startsWith('.'))) {
+      res.writeHead(404)
+      res.end('Not found')
+      return
+    }
     if (req.method === 'POST' && (urlPath === '/__upload' || urlPath === '/__save' || urlPath === '/__generate' || urlPath === '/__revise') && !authorized(req)) {
       res.writeHead(401, { 'Content-Type': 'application/json' })
       res.end('{"status":"error","message":"unauthorized"}')
