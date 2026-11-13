@@ -241,6 +241,90 @@ test('stripAttrTail splits trailing attr braces from a line', () => {
   assert.deepEqual(stripAttrTail('plain line'), { text: 'plain line', attrs: null })
 })
 
+const { setSlideDirectives, insertSlideAfter } = SimpptParser
+
+test('layout and countdown are page-only: "set" does not carry them to later slides', () => {
+  const deck = parse('# A\n\n--- set bg=#fff layout=bullets countdown=30\n\n# B\n\n---\n\n# C')
+  assert.deepEqual(deck.slides[1].meta, { bg: '#fff', layout: 'bullets', countdown: '30' })
+  assert.deepEqual(deck.slides[2].meta, { bg: '#fff' })
+})
+
+test('a separator before any content sets up the first slide instead of adding a page', () => {
+  const text = '---\nbg: #000\n---\n\n--- layout=section\n\n# A\n\n---\n\n# B'
+  const deck = parse(text, { keepEmpty: true })
+  assert.equal(deck.slides.length, 2)
+  assert.deepEqual(deck.slides[0].meta, { layout: 'section' })
+  assert.equal(deck.slides[0].raw, 0)
+  assert.equal(deck.slides[0].body, '# A')
+  assert.equal(slideIndexAt(text, text.indexOf('# A')), 0)
+  assert.equal(slideIndexAt(text, text.indexOf('# B')), 1)
+  const lines = text.split('\n')
+  const first = slideLineRange(text, 0)
+  assert.equal(lines.slice(first.start, first.end).join('\n').trim(), '# A')
+  const second = slideLineRange(text, 1)
+  assert.equal(lines.slice(second.start, second.end).join('\n').trim(), '# B')
+})
+
+test('a leading "set" separator still works as the starting defaults', () => {
+  const deck = parse('--- set bg=#000\n\n# A\n\n---\n\n# B')
+  assert.equal(deck.slides[0].meta.bg, '#000')
+  assert.equal(deck.slides[1].meta.bg, '#000')
+})
+
+test('setSlideDirectives changes one slide and leaves the others alone', () => {
+  const text = '# A\n\n--- bg=#fff\n\n# B\n\n---\n\n# C'
+  const out = setSlideDirectives(text, 1, { layout: 'bullets' })
+  assert.equal(out, '# A\n\n--- bg=#fff layout=bullets\n\n# B\n\n---\n\n# C')
+  assert.equal(setSlideDirectives(out, 1, { layout: 'quote' }), '# A\n\n--- bg=#fff layout=quote\n\n# B\n\n---\n\n# C')
+  assert.equal(setSlideDirectives(out, 1, { layout: null }), text)
+  assert.equal(setSlideDirectives(text, 2, { layout: 'big' }), '# A\n\n--- bg=#fff\n\n# B\n\n--- layout=big\n\n# C')
+  assert.equal(setSlideDirectives(text, 9, { layout: 'big' }), text)
+})
+
+test('setSlideDirectives keeps "set" and can add it', () => {
+  const text = '# A\n\n--- set bg=#fff color=#111\n\n# B'
+  assert.equal(setSlideDirectives(text, 1, { layout: 'top' }), '# A\n\n--- set bg=#fff color=#111 layout=top\n\n# B')
+  assert.equal(
+    setSlideDirectives('# A\n\n--- layout=top\n\n# B', 1, { bg: '#000', color: '#fff' }, { sticky: true }),
+    '# A\n\n--- set layout=top bg=#000 color=#fff\n\n# B',
+  )
+})
+
+test('setSlideDirectives on the first slide adds a line after the front matter', () => {
+  const text = '---\nbg: #000\n---\n\n# A\n\n---\n\n# B'
+  const out = setSlideDirectives(text, 0, { layout: 'section' })
+  assert.equal(out, '---\nbg: #000\n---\n--- layout=section\n\n\n# A\n\n---\n\n# B')
+  const deck = parse(out, { keepEmpty: true })
+  assert.equal(deck.slides.length, 2)
+  assert.equal(deck.slides[0].meta.layout, 'section')
+  assert.equal(deck.slides[1].meta.layout, undefined)
+  assert.deepEqual(deck.globals, { bg: '#000' })
+  assert.equal(setSlideDirectives(out, 0, { layout: 'big' }).includes('--- layout=big'), true)
+  assert.equal(parse(setSlideDirectives(out, 0, { layout: null }), { keepEmpty: true }).slides[0].meta.layout, undefined)
+})
+
+test('setSlideDirectives on the first slide of a deck without front matter', () => {
+  const out = setSlideDirectives('# A\n\n---\n\n# B', 0, { layout: 'big' })
+  const deck = parse(out, { keepEmpty: true })
+  assert.equal(deck.slides.length, 2)
+  assert.equal(deck.slides[0].meta.layout, 'big')
+  assert.equal(deck.slides[0].body, '# A')
+  assert.deepEqual(deck.globals, {})
+  assert.equal(setSlideDirectives('# A', 0, { layout: null }), '# A')
+})
+
+test('insertSlideAfter adds a page after the given one and says where it is', () => {
+  const text = '# A\n\n---\n\n# B\n'
+  const mid = insertSlideAfter(text, 0, 'layout=bullets', '# New\n\n- one')
+  assert.equal(mid.index, 1)
+  const deck = parse(mid.text, { keepEmpty: true })
+  assert.deepEqual(deck.slides.map((sl) => sl.body), ['# A', '# New\n\n- one', '# B'])
+  assert.equal(deck.slides[1].meta.layout, 'bullets')
+  const last = insertSlideAfter(text, 1, '', '# End')
+  assert.equal(last.index, 2)
+  assert.deepEqual(parse(last.text).slides.map((sl) => sl.body), ['# A', '# B', '# End'])
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

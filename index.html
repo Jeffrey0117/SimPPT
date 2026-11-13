@@ -234,6 +234,75 @@
   }
   .deck-slide.layout-split .split-text h2 { font-size: calc(2.8vw * var(--ts, 1)); }
   .deck-slide.layout-split p { font-size: calc(2.1vw * var(--ts, 1)); line-height: 1.7; }
+  /* 版型共用：靠左、從上面排下來的那一類 */
+  .deck-slide:is(.layout-bullets, .layout-cols, .layout-quote, .layout-section) {
+    width: var(--cw, 84vw); height: 49.5vw; max-height: none;
+    align-items: flex-start; text-align: left;
+  }
+  /* 列點 */
+  .deck-slide.layout-bullets { justify-content: flex-start; gap: 2.6vw; padding-top: 4.5vw; }
+  .deck-slide.layout-bullets h1 { font-size: calc(4.4vw * var(--ts, 1)); }
+  .deck-slide.layout-bullets :is(ul, ol) {
+    list-style: none; padding-left: 0;
+    display: flex; flex-direction: column; gap: 1.5vw;
+    font-size: calc(2.7vw * var(--ts, 1)); line-height: 1.5;
+  }
+  .deck-slide.layout-bullets li { position: relative; padding-left: 2.6vw; }
+  .deck-slide.layout-bullets ul > li::before {
+    content: ""; position: absolute; left: 0; top: 0.66em;
+    width: 1.2vw; height: 0.3vw; border-radius: 0.15vw;
+    color: var(--accent, inherit); background: currentColor;
+  }
+  .deck-slide.layout-bullets ol { counter-reset: point; }
+  .deck-slide.layout-bullets ol > li { counter-increment: point; padding-left: 3.6vw; }
+  .deck-slide.layout-bullets ol > li::before {
+    content: counter(point, decimal-leading-zero); position: absolute; left: 0; top: 0.22em;
+    font-size: 0.78em; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--accent, inherit);
+  }
+  .deck-slide.layout-bullets p { font-size: calc(2.2vw * var(--ts, 1)); opacity: 0.75; }
+  /* 兩欄：每個 ## 小標開一欄 */
+  .deck-slide.layout-cols { justify-content: flex-start; gap: 2.6vw; padding-top: 4.5vw; }
+  .deck-slide.layout-cols h1 { font-size: calc(4.2vw * var(--ts, 1)); }
+  .deck-slide.layout-cols .cols-row {
+    flex: 1; width: 100%; min-height: 0;
+    display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+    gap: 4vw; align-items: start;
+  }
+  .deck-slide.layout-cols .col { display: flex; flex-direction: column; gap: 1.3vw; min-width: 0; }
+  .deck-slide.layout-cols .col h2 {
+    font-size: calc(2.5vw * var(--ts, 1));
+    padding-bottom: 0.9vw; border-bottom: 0.18vw solid; border-color: var(--accent, currentColor);
+  }
+  .deck-slide.layout-cols :is(p, ul, ol) { font-size: calc(2.1vw * var(--ts, 1)); line-height: 1.65; }
+  .deck-slide.layout-cols.cols-auto :is(ul, ol) { columns: 2; column-gap: 5vw; width: 100%; }
+  .deck-slide.layout-cols.cols-auto li { break-inside: avoid; }
+  /* 金句 */
+  .deck-slide.layout-quote { justify-content: center; gap: 2.2vw; }
+  .deck-slide.layout-quote::before {
+    content: "\201C"; font-family: Georgia, "Times New Roman", serif;
+    font-size: 13vw; line-height: 0.62; height: 5.4vw;
+    color: var(--accent, inherit);
+  }
+  .deck-slide.layout-quote :is(h1, h2, p:first-of-type) {
+    font-size: calc(4.2vw * var(--ts, 1)); font-weight: 700; line-height: 1.45;
+  }
+  .deck-slide.layout-quote p ~ p { font-size: calc(2vw * var(--ts, 1)); font-weight: 400; opacity: 0.65; }
+  /* 章節頁 */
+  .deck-slide.layout-section { justify-content: flex-end; gap: 1.6vw; padding-bottom: 5vw; }
+  .deck-slide.layout-section::before {
+    content: ""; width: 6vw; height: 0.5vw; margin-bottom: 1.2vw;
+    color: var(--accent, inherit); background: currentColor;
+  }
+  .deck-slide.layout-section h1 { font-size: calc(7vw * var(--ts, 1)); line-height: 1.15; letter-spacing: -0.02em; }
+  .deck-slide.layout-section p { font-size: calc(2.4vw * var(--ts, 1)); opacity: 0.7; }
+  /* 大字 */
+  .deck-slide.layout-big { gap: 1.2vw; }
+  .deck-slide.layout-big h1 {
+    font-size: calc(15vw * var(--ts, 1)); line-height: 1.05; letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums; color: var(--accent, inherit);
+  }
+  .deck-slide.layout-big p { font-size: calc(2.8vw * var(--ts, 1)); opacity: 0.75; }
   .slide-scope figure { margin: 0; min-height: 0; }
   .slide-scope img {
     display: block; max-width: 80vw; max-height: 38vw; border-radius: 0.5vw;
@@ -386,6 +455,53 @@
   .mini-tools input[type="color"] {
     width: 26px; height: 22px; border: 0; background: none; cursor: pointer; padding: 0;
   }
+  /* 版型面板 */
+  #preset-panel {
+    position: absolute; top: var(--space-3); z-index: 12;
+    width: min(560px, calc(100vw - 2 * var(--space-5)));
+    display: flex; flex-direction: column; gap: var(--space-4);
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-l);
+    padding: var(--space-5);
+  }
+  .preset-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .preset-head h3, .preset-sub { font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
+  .preset-sub small { font-weight: 400; color: var(--color-neutral); margin-left: var(--space-2); }
+  .seg { display: inline-flex; padding: 2px; background: var(--color-well); border: 1px solid var(--color-rule); border-radius: var(--radius-m); }
+  .seg button {
+    height: 26px; padding: 0 var(--space-3);
+    font: inherit; font-size: var(--text-xs); color: var(--color-neutral);
+    background: none; border: 0; border-radius: var(--radius-s); cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--color-paper-4); color: var(--color-ink); }
+  #preset-layouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+  .preset {
+    display: flex; flex-direction: column; gap: var(--space-2);
+    padding: var(--space-2); text-align: left;
+    font: inherit; font-size: var(--text-sm); color: var(--color-muted);
+    background: none; border: 1px solid var(--color-rule); border-radius: var(--radius-m); cursor: pointer;
+    transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+  }
+  .preset:hover { color: var(--color-ink); border-color: var(--color-rule-2); background: var(--color-paper-3); }
+  .preset.on { color: var(--color-ink); border-color: var(--color-accent); }
+  .preset svg { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--color-well); color: var(--color-neutral); }
+  .preset.on svg, .preset:hover svg { color: var(--color-muted); }
+  .preset svg .hot { fill: var(--color-accent); }
+  #preset-colors { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .tone {
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    height: 34px; padding: 0 var(--space-3) 0 var(--space-1);
+    font: inherit; font-size: var(--text-sm); color: var(--color-muted);
+    background: none; border: 1px solid var(--color-rule); border-radius: var(--radius-m); cursor: pointer;
+    transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
+  }
+  .tone:hover { color: var(--color-ink); border-color: var(--color-rule-2); }
+  .tone i {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 24px; border-radius: 4px; border: 1px solid var(--color-rule-2);
+    font-style: normal; font-size: 12px; font-weight: 700;
+  }
+  .tone i b { margin-left: 1px; }
+  @media (max-width: 640px) { #preset-layouts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   #ed-viewport {
     position: relative;
     overflow: hidden; border-radius: var(--radius-s);
@@ -591,6 +707,7 @@
   <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
   <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-layout" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></symbol>
   <symbol id="i-fs-enter" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
   <symbol id="i-fs-exit" viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></symbol>
 </svg>
@@ -684,6 +801,7 @@
     <button id="ed-present" class="btn btn-ghost" title="開觀眾視窗（拿去錄影），這個視窗變講者台"><svg class="ic"><use href="#i-mic"/></svg><span class="lbl">講者</span></button>
     <span class="bar-sep"></span>
     <button id="ed-save" class="btn btn-ghost" title="存檔（Ctrl+S）"><svg class="ic"><use href="#i-save"/></svg><span class="lbl">存檔</span></button>
+    <button id="ed-presets" class="btn btn-ghost" title="版型與配色" aria-expanded="false"><svg class="ic"><use href="#i-layout"/></svg><span class="lbl">版型</span></button>
     <button id="ed-find" class="btn btn-ghost" title="搜尋並取代（Ctrl+H）"><svg class="ic"><use href="#i-search"/></svg><span class="lbl">取代</span></button>
     <button id="ed-reset" class="btn btn-ghost" title="清掉此頁所有拖曳改動，回到 markdown 預設排版"><svg class="ic"><use href="#i-undo"/></svg><span class="lbl">還原版面</span></button>
     <button id="ed-ai-revise" class="btn btn-ghost" title="跟 AI 說要怎麼調整這份簡報"><svg class="ic"><use href="#i-message"/></svg><span class="lbl">AI 編輯</span></button>
@@ -700,6 +818,18 @@
     <button id="ed-home" class="btn btn-ghost btn-icon" title="回首頁" aria-label="回首頁"><svg class="ic"><use href="#i-home"/></svg></button>
   </div>
   <div id="editor-body">
+    <div id="preset-panel" hidden>
+      <div class="preset-head">
+        <h3>版型</h3>
+        <div class="seg" role="group" aria-label="版型要用在哪裡">
+          <button type="button" id="preset-mode-apply" aria-pressed="true">套用到這一頁</button>
+          <button type="button" id="preset-mode-insert" aria-pressed="false">插入新的一頁</button>
+        </div>
+      </div>
+      <div id="preset-layouts"></div>
+      <div class="preset-sub">配色<small>從這一頁起都換</small></div>
+      <div id="preset-colors"></div>
+    </div>
     <div id="find-bar" hidden>
       <input type="text" id="find-query" placeholder="搜尋…">
       <input type="text" id="find-replacement" placeholder="取代成…">
@@ -843,6 +973,20 @@ const SimpptParser = (() => {
       return eq > 0 ? { ...acc, [pair.slice(0, eq)]: pair.slice(eq + 1) } : acc
     }, {})
 
+  // 只屬於那一頁的設定：分隔線寫了 set 也不會帶到後面的頁
+  const PAGE_ONLY = ['layout', 'countdown']
+  const carriedOn = (meta) =>
+    Object.fromEntries(Object.entries(meta).filter(([key]) => !PAGE_ONLY.includes(key)))
+
+  // 第一頁還沒有任何內容就遇到的分隔線 = 「第一頁的設定」，不是分頁。沒有就回 -1。
+  const leadSepLine = (lines, start) => {
+    for (let j = start; j < lines.length; j += 1) {
+      if (lines[j].trim() === '') continue
+      return SEP_RE.test(lines[j]) ? j : -1
+    }
+    return -1
+  }
+
   const parseFrontmatter = (lines) => {
     if (lines.length === 0 || lines[0].trim() !== '---') return { globals: {}, start: 0 }
     let close = -1
@@ -862,16 +1006,19 @@ const SimpptParser = (() => {
   const parse = (text, opts = {}) => {
     const lines = text.replace(/\r\n?/g, '\n').split('\n')
     const { globals, start } = parseFrontmatter(lines)
+    const lead = leadSepLine(lines, start)
     const rawSlides = [{ meta: {}, sticky: false, lines: [] }]
     for (let j = start; j < lines.length; j += 1) {
       const m = lines[j].match(SEP_RE)
       if (m) {
         const raw = m[1] || ''
-        rawSlides.push({
+        const slide = {
           meta: parseDirectives(raw),
           sticky: raw.split(/\s+/).includes('set'),
           lines: [],
-        })
+        }
+        if (j === lead) rawSlides[0] = slide
+        else rawSlides.push(slide)
       } else {
         rawSlides[rawSlides.length - 1].lines.push(lines[j])
       }
@@ -879,7 +1026,7 @@ const SimpptParser = (() => {
     let defaults = {}
     const slides = rawSlides
       .map((s, i) => {
-        if (s.sticky) defaults = { ...defaults, ...s.meta }
+        if (s.sticky) defaults = { ...defaults, ...carriedOn(s.meta) }
         return {
           meta: { ...defaults, ...s.meta },
           ownMeta: s.meta,
@@ -902,9 +1049,10 @@ const SimpptParser = (() => {
     const lines = norm.split('\n')
     const { start } = parseFrontmatter(lines)
     const cursorLine = norm.slice(0, offset).split('\n').length - 1
+    const lead = leadSepLine(lines, start)
     let idx = 0
     for (let j = start; j <= cursorLine && j < lines.length; j += 1) {
-      if (SEP_RE.test(lines[j])) idx += 1
+      if (j !== lead && SEP_RE.test(lines[j])) idx += 1
     }
     return idx
   }
@@ -912,9 +1060,10 @@ const SimpptParser = (() => {
   const slideLineRange = (text, index) => {
     const lines = text.replace(/\r\n?/g, '\n').split('\n')
     const { start } = parseFrontmatter(lines)
+    const lead = leadSepLine(lines, start)
     let k = 0
-    let from = start
-    for (let j = start; j < lines.length; j += 1) {
+    let from = lead >= 0 ? lead + 1 : start
+    for (let j = from; j < lines.length; j += 1) {
       if (SEP_RE.test(lines[j])) {
         if (k === index) return { start: from, end: j }
         k += 1
@@ -922,6 +1071,60 @@ const SimpptParser = (() => {
       }
     }
     return k === index ? { start: from, end: lines.length } : null
+  }
+
+  // 哪一行是第 index 頁的分隔線（第一頁用開頭那條，沒有就 -1）
+  const sepLineOf = (lines, start, index) => {
+    const lead = leadSepLine(lines, start)
+    if (index === 0) return lead
+    let k = 0
+    for (let j = start; j < lines.length; j += 1) {
+      if (j === lead || !SEP_RE.test(lines[j])) continue
+      k += 1
+      if (k === index) return j
+    }
+    return -1
+  }
+
+  // 改某一頁分隔線上的設定，回傳新的全文。changes 的值給 null = 拿掉那個設定；
+  // sticky = 加上 set（從這頁起都生效）。第一頁沒有分隔線時在最前面補一條。
+  const setSlideDirectives = (text, index, changes, opts = {}) => {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n')
+    const { start } = parseFrontmatter(lines)
+    const at = sepLineOf(lines, start, index)
+    if (at < 0 && index !== 0) return text
+    const tokens = at >= 0 ? ((lines[at].match(SEP_RE)[1] || '').split(/\s+/).filter(Boolean)) : []
+    const keyOf = (token) => (token.indexOf('=') > 0 ? token.slice(0, token.indexOf('=')) : '')
+    const kept = tokens.filter((token) => token !== 'set' && !(keyOf(token) in changes))
+    const added = Object.entries(changes)
+      .filter(([, value]) => value !== null && value !== undefined && value !== '')
+      .map(([key, value]) => key + '=' + value)
+    const sticky = tokens.includes('set') || opts.sticky === true
+    const next = [...(sticky && (kept.length + added.length > 0) ? ['set'] : []), ...kept, ...added]
+    const line = next.length > 0 ? '--- ' + next.join(' ') : '---'
+    if (at >= 0) {
+      // 第一頁那條線清空了就整條拿掉 — 留一條光禿禿的 --- 在檔頭會被當成 frontmatter 的開頭
+      const isLead = index === 0
+      const out = isLead && next.length === 0
+        ? [...lines.slice(0, at), ...lines.slice(at + 1)]
+        : [...lines.slice(0, at), line, ...lines.slice(at + 1)]
+      return out.join('\n')
+    }
+    if (next.length === 0) return text
+    return [...lines.slice(0, start), line, '', ...lines.slice(start)].join('\n')
+  }
+
+  // 在第 index 頁後面插一頁，回傳 { text, index: 新頁的編號 }
+  const insertSlideAfter = (text, index, directives, body) => {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n')
+    const range = slideLineRange(text, index)
+    const at = range ? range.end : lines.length
+    const head = lines.slice(0, at)
+    while (head.length > 0 && head[head.length - 1].trim() === '') head.pop()
+    const tail = lines.slice(at)
+    const sep = directives ? '--- ' + directives : '---'
+    const block = [...(head.length > 0 ? [''] : []), sep, '', ...body.split('\n'), '']
+    return { text: [...head, ...block, ...tail].join('\n'), index: range ? index + 1 : 0 }
   }
 
   const escapeHtml = (s) => s
@@ -1062,7 +1265,10 @@ const SimpptParser = (() => {
     return `<p${abs}>${inline(escapeHtml(b.lines.join(' ')))}</p>`
   }).join('')
 
-  return { parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE }
+  return {
+    parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE,
+    setSlideDirectives, insertSlideAfter,
+  }
 })()
 </script>
 
@@ -1303,7 +1509,8 @@ const SaveLogic = (() => {
     return state.blobUrls.get(hit.key)
   }
 
-  const LAYOUTS = ['top', 'split']
+  const LAYOUTS = ['top', 'split', 'bullets', 'cols', 'quote', 'section', 'big']
+  const MAX_COLS = 3
 
   const applyWidth = (container, width) => {
     const w = parseFloat(width)
@@ -1311,8 +1518,35 @@ const SaveLogic = (() => {
     else container.style.removeProperty('--cw')
   }
 
+  // 兩欄版型：每個 ## 小標開一欄；沒有兩個以上的小標，就讓清單自己分兩欄
+  const applyColumns = (container) => {
+    const children = [...container.children]
+    const heads = children.filter((el) => el.tagName === 'H2')
+    if (heads.length < 2) {
+      container.classList.add('cols-auto')
+      return
+    }
+    const row = document.createElement('div')
+    row.className = 'cols-row'
+    row.style.setProperty('--cols', String(Math.min(heads.length, MAX_COLS)))
+    let col = null
+    for (const el of children.slice(children.indexOf(heads[0]))) {
+      if (el.tagName === 'H2') {
+        col = document.createElement('div')
+        col.className = 'col'
+        row.appendChild(col)
+      }
+      col.appendChild(el)
+    }
+    container.appendChild(row)
+  }
+
   const applyLayout = (container, layout) => {
     container.className = `deck-slide slide-scope${LAYOUTS.includes(layout) ? ` layout-${layout}` : ''}`
+    if (layout === 'cols') {
+      applyColumns(container)
+      return
+    }
     if (layout !== 'split') return
     const fig = container.querySelector('figure')
     if (!fig) return
@@ -1867,6 +2101,7 @@ const SaveLogic = (() => {
     updateEdStrip(deck)
     selectedKs = new Set([...selectedKs].filter((k) => previewBlocks[k]))
     applySelectionClasses()
+    if (!presetPanel.hidden) markCurrentPreset()
   }
 
   const edStrip = document.getElementById('ed-strip')
@@ -2591,6 +2826,153 @@ const SaveLogic = (() => {
     setTimeout(() => {
       if (!txtTools.contains(document.activeElement)) txtTools.hidden = true
     }, 150)
+  })
+
+  // --- 版型與配色 ---
+
+  // 每個版型：id = 寫進分隔線的 layout 值（'' = 預設置中）、縮圖、插入新頁時的範例內容
+  const LAYOUT_PRESETS = [
+    { id: '', name: '置中', art: '<rect x="14" y="10" width="20" height="3"/><rect x="18" y="16" width="12" height="1.5"/>',
+      body: '# 標題\n\n一句話說明。' },
+    { id: 'top', name: '標題在上', art: '<rect x="5" y="5" width="18" height="3"/><rect x="5" y="11" width="30" height="1.5"/><rect x="5" y="14.5" width="24" height="1.5"/>',
+      body: '# 這頁的標題\n\n內文寫在這裡，**重點**用粗體。' },
+    { id: 'bullets', name: '列點', art: '<rect x="5" y="5" width="16" height="3"/><rect class="hot" x="5" y="11.5" width="2.5" height="1"/><rect x="9" y="11" width="22" height="1.5"/><rect class="hot" x="5" y="15.5" width="2.5" height="1"/><rect x="9" y="15" width="26" height="1.5"/><rect class="hot" x="5" y="19.5" width="2.5" height="1"/><rect x="9" y="19" width="18" height="1.5"/>',
+      body: '# 這頁的重點\n\n- 第一點\n- 第二點\n- 第三點' },
+    { id: 'cols', name: '兩欄', art: '<rect x="5" y="5" width="16" height="3"/><rect x="5" y="11" width="10" height="1.5"/><rect class="hot" x="5" y="13.5" width="17" height="0.6"/><rect x="5" y="16" width="15" height="1.2"/><rect x="5" y="19" width="12" height="1.2"/><rect x="26" y="11" width="10" height="1.5"/><rect class="hot" x="26" y="13.5" width="17" height="0.6"/><rect x="26" y="16" width="15" height="1.2"/><rect x="26" y="19" width="12" height="1.2"/>',
+      body: '# 兩種做法\n\n## 左邊\n\n- 重點一\n- 重點二\n\n## 右邊\n\n- 重點一\n- 重點二' },
+    { id: 'split', name: '左圖右文', art: '<rect x="5" y="5" width="16" height="3"/><rect x="5" y="11" width="16" height="11" rx="1" opacity="0.5"/><rect x="25" y="12" width="12" height="1.5"/><rect x="25" y="16" width="17" height="1.2"/><rect x="25" y="19" width="14" height="1.2"/>',
+      body: '# 這張圖在說什麼\n\n![](圖片網址)\n\n## 小標\n\n文字寫在右邊。' },
+    { id: 'quote', name: '金句', art: '<rect class="hot" x="5" y="6" width="3" height="3"/><rect x="5" y="12" width="32" height="2.4"/><rect x="5" y="16.5" width="24" height="2.4"/><rect x="5" y="22" width="10" height="1"/>',
+      body: '一句你想讓人記住的話。\n\n出處或說話的人' },
+    { id: 'section', name: '章節頁', art: '<rect class="hot" x="5" y="13" width="7" height="1"/><rect x="5" y="16" width="26" height="4"/><rect x="5" y="22" width="16" height="1.2"/>',
+      body: '# 第二部分\n\n這一段要講什麼' },
+    { id: 'big', name: '大字', art: '<rect class="hot" x="12" y="6" width="24" height="10"/><rect x="16" y="19" width="16" height="1.5"/>',
+      body: '# 87%\n\n這個數字代表什麼' },
+  ]
+
+  const COLOR_PRESETS = [
+    { name: '黑底', bg: '#0d0d0f', color: '#f5f5f5', accent: '#f4b860' },
+    { name: '白底', bg: '#ffffff', color: '#1c1c1e', accent: '#d84a3f' },
+    { name: '米色', bg: '#f3ede2', color: '#2a2622', accent: '#b4532a' },
+    { name: '深藍', bg: '#101a2e', color: '#eef2f8', accent: '#7fb0ff' },
+    { name: '墨綠', bg: '#12211c', color: '#eef3ee', accent: '#8fd0a8' },
+  ]
+
+  const edPresetsBtn = document.getElementById('ed-presets')
+  const presetPanel = document.getElementById('preset-panel')
+  const presetLayouts = document.getElementById('preset-layouts')
+  const presetColors = document.getElementById('preset-colors')
+  const presetModeApply = document.getElementById('preset-mode-apply')
+  const presetModeInsert = document.getElementById('preset-mode-insert')
+  let presetMode = 'apply'
+
+  // 把整份文字換掉（版型、配色、插頁用）— 跟手動打字走同一條路，才會標成未存、更新預覽
+  const replaceEditorText = (text) => {
+    const scroll = edText.scrollTop
+    edText.value = text
+    edText.scrollTop = scroll
+    edDirty = true
+    setStatus('')
+    edStrip.dataset.key = '' // 版型和配色會改到縮圖的長相，強制重畫縮圖列
+    updatePreview()
+    scheduleSave()
+  }
+
+  // 目前這頁實際生效的版型（'' = 置中）
+  const currentLayout = () => {
+    const deck = SimpptParser.parse(edText.value, { keepEmpty: true })
+    const slide = deck.slides[previewIdx]
+    const layout = { ...deck.globals, ...(slide ? slide.meta : {}) }.layout
+    return { layout: LAYOUTS.includes(layout) ? layout : '', globalLayout: deck.globals.layout }
+  }
+
+  const markCurrentPreset = () => {
+    const { layout } = currentLayout()
+    for (const card of presetLayouts.children) {
+      card.classList.toggle('on', presetMode === 'apply' && card.dataset.layout === layout)
+    }
+  }
+
+  const usePreset = (preset) => {
+    if (presetMode === 'insert') {
+      const out = SimpptParser.insertSlideAfter(edText.value, previewIdx, preset.id ? ('layout=' + preset.id) : '', preset.body)
+      replaceEditorText(out.text)
+      jumpEditorToSlide(out.index)
+      edText.focus()
+      return
+    }
+    // 置中 = 拿掉 layout；但整份簡報在 frontmatter 設了別的版型時，要明講這頁用置中
+    const { globalLayout } = currentLayout()
+    const value = preset.id || (globalLayout ? 'center' : null)
+    replaceEditorText(SimpptParser.setSlideDirectives(edText.value, previewIdx, { layout: value }))
+    markCurrentPreset()
+  }
+
+  const useColors = (tone) => {
+    const { bg, color, accent } = tone
+    replaceEditorText(SimpptParser.setSlideDirectives(edText.value, previewIdx, { bg, color, accent }, { sticky: true }))
+  }
+
+  const setPresetMode = (mode) => {
+    presetMode = mode
+    presetModeApply.setAttribute('aria-pressed', String(mode === 'apply'))
+    presetModeInsert.setAttribute('aria-pressed', String(mode === 'insert'))
+    markCurrentPreset()
+  }
+
+  const buildPresetPanel = () => {
+    presetLayouts.replaceChildren(...LAYOUT_PRESETS.map((preset) => {
+      const card = document.createElement('button')
+      card.type = 'button'
+      card.className = 'preset'
+      card.dataset.layout = preset.id
+      // art 是上面寫死的 SVG 片段，不含任何使用者輸入
+      card.innerHTML = '<svg viewBox="0 0 48 27" fill="currentColor" aria-hidden="true">' + preset.art + '</svg>'
+      card.append(preset.name)
+      card.addEventListener('click', () => usePreset(preset))
+      return card
+    }))
+    presetColors.replaceChildren(...COLOR_PRESETS.map((tone) => {
+      const chip = document.createElement('button')
+      chip.type = 'button'
+      chip.className = 'tone'
+      const swatch = document.createElement('i')
+      swatch.style.background = tone.bg
+      swatch.style.color = tone.color
+      swatch.textContent = 'A'
+      const mark = document.createElement('b')
+      mark.style.color = tone.accent
+      mark.textContent = 'a'
+      swatch.append(mark)
+      chip.append(swatch, tone.name)
+      chip.addEventListener('click', () => useColors(tone))
+      return chip
+    }))
+  }
+
+  const closePresetPanel = () => {
+    presetPanel.hidden = true
+    edPresetsBtn.setAttribute('aria-expanded', 'false')
+  }
+
+  const openPresetPanel = () => {
+    if (presetLayouts.children.length === 0) buildPresetPanel()
+    const bodyLeft = presetPanel.parentElement.getBoundingClientRect().left
+    presetPanel.style.left = Math.max(12, edPresetsBtn.getBoundingClientRect().left - bodyLeft) + 'px'
+    presetPanel.hidden = false
+    edPresetsBtn.setAttribute('aria-expanded', 'true')
+    markCurrentPreset()
+  }
+
+  edPresetsBtn.addEventListener('click', () => (presetPanel.hidden ? openPresetPanel() : closePresetPanel()))
+  presetModeApply.addEventListener('click', () => setPresetMode('apply'))
+  presetModeInsert.addEventListener('click', () => setPresetMode('insert'))
+  document.addEventListener('pointerdown', (e) => {
+    if (presetPanel.hidden || presetPanel.contains(e.target) || edPresetsBtn.contains(e.target)) return
+    closePresetPanel()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !presetPanel.hidden) closePresetPanel()
   })
 
   // --- 首頁：存在這台 decks/ 裡的簡報 ---

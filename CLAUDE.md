@@ -26,6 +26,13 @@
 - 顏色、字體、間距都是 `:root` 的 `--color-*`／`--font-*`／`--space-*`（OKLCH，暖色調深色），新樣式一律用 token，不要寫死色碼。投影片內容的顏色由簡報自己決定，不吃這些 token
 - 圖示是 `<body>` 開頭的 SVG sprite（Lucide 線條），用 `<svg class="ic"><use href="#i-名稱"/></svg>`；不用 emoji
 
+## 版型
+
+- 版型＝分隔線上的 `layout=`，樣式是 `.deck-slide.layout-<名稱>`（一律 vw）。加新版型要動四處：`LAYOUTS`、CSS、`LAYOUT_PRESETS`（面板縮圖＋插入新頁的範例內容）、`lib/generate-prompt.mjs` 的語法說明
+- `layout` 和 `countdown` 只作用在那一頁（parser 的 `PAGE_ONLY`），寫了 `set` 也不會帶到後面
+- 內容開始前的第一條分隔線是第一頁的設定（`leadSepLine`），不是分頁；`parse`、`slideIndexAt`、`slideLineRange` 三處要一致
+- 編輯器改分隔線一律走 `SimpptParser.setSlideDirectives`／`insertSlideAfter`（純函式，有測試），不要自己拼字串
+
 ## 架構要點
 
 - 單檔原則：不引外部依賴；favicon 是 inline SVG data URI
