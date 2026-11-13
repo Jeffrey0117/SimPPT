@@ -415,6 +415,23 @@ test('moving a page away and back leaves no leftover settings behind', () => {
   assert.equal(back.text.split('bg=').length - 1, 1)
 })
 
+test('moveSlideTo drops a page anywhere and every page keeps its look', () => {
+  const { moveSlideTo } = SimpptParser
+  const toFront = moveSlideTo(FOUR, 3, 0)
+  assert.equal(toFront.index, 0)
+  assert.deepEqual(looks(toFront.text), [
+    '# D / #fff / centre', '# A / default / centre', '# B / #fff / centre', '# C / #fff / bullets',
+  ])
+  const toEnd = moveSlideTo(FOUR, 0, 3)
+  assert.equal(toEnd.index, 3)
+  assert.deepEqual(looks(toEnd.text), [
+    '# B / #fff / centre', '# C / #fff / bullets', '# D / #fff / centre', '# A / default / centre',
+  ])
+  assert.equal(moveSlideTo(FOUR, 2, 2).text, FOUR)
+  assert.equal(moveSlideTo(FOUR, 2, 7).text, FOUR)
+  assert.equal(moveSlideTo(FOUR, -1, 2).text, FOUR)
+})
+
 test('moveSlide at either end does nothing; untouched separators keep their exact text', () => {
   assert.equal(moveSlide(FOUR, 0, -1).text, FOUR)
   assert.equal(moveSlide(FOUR, 3, 1).text, FOUR)

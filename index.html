@@ -553,7 +553,15 @@
     background: var(--color-paper-3); border: 1px solid var(--color-rule-2); border-radius: var(--radius-s); cursor: pointer;
   }
   #ed-status button:hover { background: var(--color-paper-4); }
-  #ed-strip { display: flex; gap: 10px; justify-content: center; margin-top: var(--space-2); }
+  #ed-strip { position: relative; display: flex; gap: 10px; justify-content: center; margin-top: var(--space-2); }
+  #ed-strip .st-thumb { touch-action: none; }
+  #ed-strip .st-thumb.dragging { z-index: 3; cursor: grabbing; opacity: 0.85; box-shadow: 0 0 0 2px var(--color-accent); }
+  #ed-strip.sorting .st-thumb:not(.dragging) { cursor: grabbing; }
+  /* 拖曳排序時，標出放開後會插進去的位置 */
+  #strip-marker {
+    position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px;
+    border-radius: 2px; background: var(--color-accent); pointer-events: none;
+  }
 
   /* --- 播放 --- */
   #indicator {
@@ -1291,16 +1299,17 @@ const SimpptParser = (() => {
     return { text: writePages(head, globals, next), index: Math.min(index, next.length - 1) }
   }
 
-  // 把第 index 頁往前（delta = -1）或往後（+1）移一格。到頭了就不動。
-  const moveSlide = (text, index, delta) => {
+  // 把第 from 頁搬到第 to 頁的位置（其他頁順著讓開）。位置不合理或沒變就不動。
+  const moveSlideTo = (text, from, to) => {
     const { head, globals, slides } = readPages(text)
-    const to = index + delta
-    if (!slides[index] || to < 0 || to >= slides.length || delta === 0) return { text, index }
-    const next = [...slides]
-    next[index] = slides[to]
-    next[to] = slides[index]
+    if (!slides[from] || !slides[to] || from === to) return { text, index: from }
+    const rest = [...slides.slice(0, from), ...slides.slice(from + 1)]
+    const next = [...rest.slice(0, to), slides[from], ...rest.slice(to)]
     return { text: writePages(head, globals, next), index: to }
   }
+
+  // 把第 index 頁往前（delta = -1）或往後（+1）移一格。到頭了就不動。
+  const moveSlide = (text, index, delta) => moveSlideTo(text, index, index + delta)
 
   const escapeHtml = (s) => s
     .replace(/&/g, '&amp;')
@@ -1442,7 +1451,7 @@ const SimpptParser = (() => {
 
   return {
     parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE,
-    setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide,
+    setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo,
   }
 })()
 </script>
@@ -2300,6 +2309,87 @@ const SaveLogic = (() => {
     jumpEditorToSlide(nextIdx)
   }
 
+  // --- 拖曳縮圖排序 ---
+
+  const DRAG_START_PX = 6 // 移動超過這個距離才算拖曳，不然就是點一下
+  let thumbDrag = null
+  let swallowThumbClick = false
+
+  // 指標在哪兩張縮圖之間 → { slot: 放開後要插在第幾頁前面, x: 標記線相對縮圖列的位置 }
+  const dropSlotAt = (clientX) => {
+    const thumbs = [...edStrip.querySelectorAll('.st-thumb')]
+    const stripLeft = edStrip.getBoundingClientRect().left
+    const half = STRIP_GAP / 2
+    for (const el of thumbs) {
+      const box = el.getBoundingClientRect()
+      if (clientX < box.left + box.width / 2) {
+        return { slot: Number(el.dataset.page), x: box.left - half - stripLeft }
+      }
+    }
+    const last = thumbs[thumbs.length - 1]
+    const box = last.getBoundingClientRect()
+    return { slot: Number(last.dataset.page) + 1, x: box.right + half - stripLeft }
+  }
+
+  const endThumbDrag = () => {
+    if (!thumbDrag) return
+    const { thumb, marker, onMove, onUp } = thumbDrag
+    thumb.removeEventListener('pointermove', onMove)
+    thumb.removeEventListener('pointerup', onUp)
+    thumb.removeEventListener('pointercancel', onUp)
+    thumb.classList.remove('dragging')
+    thumb.style.transform = ''
+    edStrip.classList.remove('sorting')
+    marker.remove()
+    thumbDrag = null
+  }
+
+  const startThumbDrag = (e, thumb, page) => {
+    if (e.button !== 0 || thumbDrag) return
+    const startX = e.clientX
+    const marker = document.createElement('div')
+    marker.id = 'strip-marker'
+    let active = false
+    let target = page
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX
+      if (!active && Math.abs(dx) < DRAG_START_PX) return
+      if (!active) {
+        active = true
+        thumb.classList.add('dragging')
+        edStrip.classList.add('sorting')
+        edStrip.append(marker)
+      }
+      thumb.style.transform = 'translateX(' + dx + 'px)'
+      const { slot, x } = dropSlotAt(ev.clientX)
+      // 插在自己前面或後面 = 位置沒變
+      target = slot > page ? slot - 1 : slot
+      marker.hidden = target === page
+      marker.style.left = x + 'px'
+    }
+    const onUp = () => {
+      const moved = active && target !== page
+      // 拖曳結束後瀏覽器還會補一個 click，別讓它變成「跳到那一頁」
+      swallowThumbClick = active
+      endThumbDrag()
+      if (!moved) return
+      const before = { text: edText.value, index: previewIdx }
+      commitPageOp(before, SimpptParser.moveSlideTo(before.text, page, target), '第 ' + (page + 1) + ' 頁已移到第 ' + (target + 1) + ' 頁')
+    }
+    thumbDrag = { thumb, marker, onMove, onUp }
+    // 一按下就把指標綁在這張縮圖上：滑鼠甩得再快、離開縮圖，也還收得到移動和放開
+    thumb.setPointerCapture(e.pointerId)
+    thumb.addEventListener('pointermove', onMove)
+    thumb.addEventListener('pointerup', onUp)
+    thumb.addEventListener('pointercancel', onUp)
+  }
+
+  edStrip.addEventListener('click', (e) => {
+    if (!swallowThumbClick) return
+    swallowThumbClick = false
+    e.stopPropagation()
+  }, true)
+
   const updateEdStrip = (deck) => {
     const key = `${previewIdx}:${deck.slides.length}:${edPreviewBox.clientWidth}`
     if (edStrip.dataset.key === key) return
@@ -2311,10 +2401,12 @@ const SaveLogic = (() => {
     const wPx = Math.min(THUMB_MAX, (edPreviewBox.clientWidth - previewPad() * 2 - (count - 1) * STRIP_GAP) / count)
     for (let i = from; i < from + count; i += 1) {
       const thumb = makeThumb(deck, i, wPx, i === previewIdx, jumpEditorToSlide)
+      thumb.dataset.page = String(i)
       thumb.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         openPageMenu(i, e.clientX, e.clientY)
       })
+      thumb.addEventListener('pointerdown', (e) => startThumbDrag(e, thumb, i))
       edStrip.append(thumb)
     }
   }
@@ -3216,16 +3308,21 @@ const SaveLogic = (() => {
     edStatus.append(undo)
   }
 
+  // 套用一個整頁操作的結果：換掉全文、跳到那一頁、留下可以復原的紀錄
+  const commitPageOp = (before, out, label) => {
+    if (out.text === before.text) return
+    replaceEditorText(out.text)
+    jumpEditorToSlide(out.index)
+    pageUndo = { before, after: edText.value }
+    offerUndo(label)
+  }
+
   const runPageOp = (name) => {
     const op = PAGE_OPS[name]
     const before = { text: edText.value, index: previewIdx }
     const out = op.run(before.text, menuPage)
     closePageMenu()
-    if (out.text === before.text) return
-    replaceEditorText(out.text)
-    jumpEditorToSlide(out.index)
-    pageUndo = { before, after: edText.value }
-    offerUndo('第 ' + (menuPage + 1) + ' 頁' + op.done)
+    commitPageOp(before, out, '第 ' + (menuPage + 1) + ' 頁' + op.done)
   }
 
   pageMenu.addEventListener('click', (e) => {
