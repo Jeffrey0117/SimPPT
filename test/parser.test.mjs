@@ -325,6 +325,103 @@ test('insertSlideAfter adds a page after the given one and says where it is', ()
   assert.deepEqual(parse(last.text).slides.map((sl) => sl.body), ['# A', '# B', '# End'])
 })
 
+const { duplicateSlide, deleteSlide, moveSlide } = SimpptParser
+
+// What each page looks like: first line of its body, background, layout.
+// An unset background and the built-in default are the same thing on screen.
+const looks = (text) => parse(text, { keepEmpty: true }).slides.map((sl) => [
+  sl.body.split('\n')[0],
+  !sl.meta.bg || sl.meta.bg === '#101014' ? 'default' : sl.meta.bg,
+  sl.meta.layout || 'centre',
+].join(' / '))
+
+const FOUR = '# A\n\n--- set bg=#fff\n\n# B\n\n--- layout=bullets\n\n# C\n\n---\n\n# D\n'
+
+test('duplicateSlide copies a page right after itself', () => {
+  const out = duplicateSlide('# A\n\n---\n\n# B', 0)
+  assert.equal(out.index, 1)
+  assert.deepEqual(looks(out.text), ['# A / default / centre', '# A / default / centre', '# B / default / centre'])
+})
+
+test('duplicateSlide keeps the look of the copy and of the pages after it', () => {
+  const out = duplicateSlide(FOUR, 2)
+  assert.deepEqual(looks(out.text), [
+    '# A / default / centre', '# B / #fff / centre',
+    '# C / #fff / bullets', '# C / #fff / bullets', '# D / #fff / centre',
+  ])
+  const red = duplicateSlide('# A\n\n--- bg=#f00\n\n# B\n\n---\n\n# C', 1)
+  assert.deepEqual(looks(red.text), ['# A / default / centre', '# B / #f00 / centre', '# B / #f00 / centre', '# C / default / centre'])
+})
+
+test('duplicateSlide of a page that starts a colour scheme does not restart it', () => {
+  const out = duplicateSlide(FOUR, 1)
+  assert.equal(out.text.split('set bg=#fff').length - 1, 1)
+  assert.deepEqual(looks(out.text).slice(1, 3), ['# B / #fff / centre', '# B / #fff / centre'])
+})
+
+test('deleteSlide removes a page', () => {
+  const out = deleteSlide(FOUR, 2)
+  assert.equal(out.index, 2)
+  assert.deepEqual(looks(out.text), ['# A / default / centre', '# B / #fff / centre', '# D / #fff / centre'])
+  assert.equal(deleteSlide(FOUR, 3).index, 2)
+})
+
+test('deleteSlide of the page that starts a colour scheme hands the scheme to the next page', () => {
+  const out = deleteSlide(FOUR, 1)
+  assert.deepEqual(looks(out.text), ['# A / default / centre', '# C / #fff / bullets', '# D / #fff / centre'])
+  assert.equal(out.text.split('bg=#fff').length - 1, 1)
+})
+
+test('deleteSlide of the first page keeps the front matter', () => {
+  const out = deleteSlide('---\nbg: #000\n---\n\n# A\n\n--- layout=top\n\n# B', 0)
+  const deck = parse(out.text, { keepEmpty: true })
+  assert.deepEqual(deck.globals, { bg: '#000' })
+  assert.equal(deck.slides.length, 1)
+  assert.equal(deck.slides[0].body, '# B')
+  assert.equal(deck.slides[0].meta.layout, 'top')
+})
+
+test('deleteSlide leaves a one-page deck alone', () => {
+  assert.equal(deleteSlide('# only', 0).text, '# only')
+  assert.equal(deleteSlide(FOUR, 9).text, FOUR)
+})
+
+test('moveSlide swaps a page with its neighbour and every page keeps its look', () => {
+  const up = moveSlide(FOUR, 1, -1)
+  assert.equal(up.index, 0)
+  assert.deepEqual(looks(up.text), [
+    '# B / #fff / centre', '# A / default / centre', '# C / #fff / bullets', '# D / #fff / centre',
+  ])
+  const down = moveSlide(FOUR, 2, 1)
+  assert.equal(down.index, 3)
+  assert.deepEqual(looks(down.text), [
+    '# A / default / centre', '# B / #fff / centre', '# D / #fff / centre', '# C / #fff / bullets',
+  ])
+})
+
+test('moveSlide falls back to the deck-wide colour, not the built-in one', () => {
+  const text = '---\nbg: #222\n---\n\n# A\n\n--- set bg=#fff\n\n# B\n\n---\n\n# C'
+  const out = moveSlide(text, 1, -1)
+  const deck = parse(out.text, { keepEmpty: true })
+  const shown = deck.slides.map((sl) => sl.body + ' ' + ({ ...deck.globals, ...sl.meta }).bg)
+  assert.deepEqual(shown, ['# B #fff', '# A #222', '# C #fff'])
+})
+
+test('moving a page away and back leaves no leftover settings behind', () => {
+  const there = moveSlide(FOUR, 1, -1)
+  const back = moveSlide(there.text, 0, 1)
+  assert.deepEqual(looks(back.text), looks(FOUR))
+  assert.equal(back.text.includes('#101014'), false)
+  assert.equal(back.text.split('bg=').length - 1, 1)
+})
+
+test('moveSlide at either end does nothing; untouched separators keep their exact text', () => {
+  assert.equal(moveSlide(FOUR, 0, -1).text, FOUR)
+  assert.equal(moveSlide(FOUR, 3, 1).text, FOUR)
+  const spaced = '# A\n\n---   bg=#123    layout=top\n\n# B\n\n---\n\n# C\n\n---\n\n# D'
+  assert.equal(moveSlide(spaced, 3, -1).text.includes('---   bg=#123    layout=top'), true)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

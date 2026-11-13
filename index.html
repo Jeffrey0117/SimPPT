@@ -401,7 +401,7 @@
     #editor-bar { height: 56px; padding: 0 var(--space-4); gap: var(--space-1); }
     #editor-bar .btn-ghost .lbl { display: none; }
     #editor-bar .btn-ghost { width: 34px; padding: 0; }
-    #ed-status { display: none; }
+    #ed-status:not(.has-action) { display: none; }
     #ed-text { padding: var(--space-6) var(--space-6) var(--space-7); }
     #ed-preview { padding: var(--space-5); }
     #txt-tools, #find-bar { left: var(--space-6); }
@@ -524,6 +524,35 @@
   }
   #ed-pageinfo { font-size: var(--text-md); color: var(--color-muted); font-variant-numeric: tabular-nums; }
   #ed-shortcuts { font-size: var(--text-xs); color: var(--color-neutral); }
+  #ed-pagebar { display: flex; align-items: center; gap: var(--space-1); }
+  #ed-page-more { width: 28px; height: 28px; }
+  /* 這一頁的操作（右鍵選單） */
+  #page-menu {
+    position: fixed; z-index: 25; min-width: 188px;
+    display: flex; flex-direction: column; padding: var(--space-1);
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
+  }
+  #page-menu-title {
+    padding: var(--space-1) var(--space-2) var(--space-2);
+    font-size: var(--text-xs); color: var(--color-neutral); font-variant-numeric: tabular-nums;
+  }
+  #page-menu button {
+    display: flex; align-items: center; gap: var(--space-2);
+    height: 32px; padding: 0 var(--space-2);
+    font: inherit; font-size: var(--text-sm); text-align: left; color: var(--color-ink);
+    background: none; border: 0; border-radius: var(--radius-s); cursor: pointer;
+  }
+  #page-menu button .ic { color: var(--color-neutral); }
+  #page-menu button:hover:not(:disabled) { background: var(--color-paper-4); }
+  #page-menu button:disabled { color: var(--color-neutral); opacity: 0.5; cursor: default; }
+  #page-menu hr { border: 0; border-top: 1px solid var(--color-rule); margin: var(--space-1) 0; }
+  #page-menu .danger, #page-menu .danger .ic { color: var(--color-danger); }
+  #ed-status button {
+    margin-left: var(--space-2); padding: 2px var(--space-2);
+    font: inherit; font-size: var(--text-sm); color: var(--color-ink);
+    background: var(--color-paper-3); border: 1px solid var(--color-rule-2); border-radius: var(--radius-s); cursor: pointer;
+  }
+  #ed-status button:hover { background: var(--color-paper-4); }
   #ed-strip { display: flex; gap: 10px; justify-content: center; margin-top: var(--space-2); }
 
   /* --- 播放 --- */
@@ -707,6 +736,10 @@
   <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
   <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
   <symbol id="i-layout" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></symbol>
   <symbol id="i-fs-enter" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
   <symbol id="i-fs-exit" viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></symbol>
@@ -873,7 +906,10 @@
         <button id="ed-fs" title="全螢幕播放（從這頁開始）" aria-label="全螢幕播放"><svg class="ic"><use href="#i-fs-enter"/></svg></button>
       </div>
       <div id="ed-strip"></div>
-      <div id="ed-pageinfo"></div>
+      <div id="ed-pagebar">
+        <span id="ed-pageinfo"></span>
+        <button id="ed-page-more" class="btn btn-ghost btn-icon" title="這一頁的操作（也可以在投影片或縮圖上按右鍵）" aria-label="這一頁的操作"><svg class="ic"><use href="#i-more"/></svg></button>
+      </div>
       <div id="ed-shortcuts">Ctrl+S 存檔 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁 · 播放中按 E 回編輯</div>
     </div>
   </div>
@@ -909,6 +945,17 @@
 </section>
 
 <div id="stage-wait" hidden>等待講者視窗連線…<br><small>回到另一個視窗按「講者」</small></div>
+
+<div id="page-menu" role="menu" hidden>
+  <div id="page-menu-title"></div>
+  <button type="button" role="menuitem" data-op="duplicate"><svg class="ic"><use href="#i-copy"/></svg>複製這一頁</button>
+  <button type="button" role="menuitem" data-op="add"><svg class="ic"><use href="#i-plus"/></svg>在後面新增一頁</button>
+  <hr>
+  <button type="button" role="menuitem" data-op="prev"><svg class="ic"><use href="#i-arrow-left"/></svg>往前移</button>
+  <button type="button" role="menuitem" data-op="next"><svg class="ic"><use href="#i-arrow-right"/></svg>往後移</button>
+  <hr>
+  <button type="button" role="menuitem" data-op="delete" class="danger"><svg class="ic"><use href="#i-trash"/></svg>刪除這一頁</button>
+</div>
 
 <div id="toast" hidden></div>
 <input id="file-input" type="file" accept=".md,.markdown,.txt" hidden>
@@ -1127,6 +1174,134 @@ const SimpptParser = (() => {
     return { text: [...head, ...block, ...tail].join('\n'), index: range ? index + 1 : 0 }
   }
 
+  // --- 整頁操作：複製、刪除、前後移動 ---
+  // 原則：動完之後，每一頁看起來都要跟原本一樣。配色常常是某一頁寫 set 之後一路沿用，
+  // 頁面一搬動沿用關係就變了，所以搬完會逐頁檢查，哪一頁的樣子跑掉就在它的分隔線補回來。
+
+  // 沒設定時畫面上實際用的值（跟播放器的預設一致），用來表達「回到沒設定的樣子」
+  const NEUTRAL = { bg: '#101014', color: '#f5f5f5', accent: 'inherit', width: '84' }
+
+  const readTokens = (raw) => {
+    const tokens = (raw || '').split(/\s+/).filter(Boolean)
+    return {
+      sticky: tokens.includes('set'),
+      bare: tokens.filter((t) => t !== 'set' && t.indexOf('=') <= 0),
+      kv: tokens.filter((t) => t.indexOf('=') > 0).map((t) => [t.slice(0, t.indexOf('=')), t.slice(t.indexOf('=') + 1)]),
+    }
+  }
+
+  // 把全文拆成 { head: frontmatter 那幾行, globals, slides }；每頁帶著它想要的樣子（want）
+  const readPages = (text) => {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n')
+    const { globals, start } = parseFrontmatter(lines)
+    const lead = leadSepLine(lines, start)
+    const slides = [{ raw: null, ...readTokens(''), lines: [] }]
+    for (let j = start; j < lines.length; j += 1) {
+      const m = lines[j].match(SEP_RE)
+      if (!m) {
+        slides[slides.length - 1].lines.push(lines[j])
+      } else if (j === lead) {
+        slides[0] = { raw: lines[j], ...readTokens(m[1]), lines: [] }
+      } else {
+        slides.push({ raw: lines[j], ...readTokens(m[1]), lines: [] })
+      }
+    }
+    const metas = parse(text, { keepEmpty: true }).slides.map((sl) => sl.meta)
+    return {
+      head: lines.slice(0, start),
+      globals,
+      slides: slides.map((sl, i) => ({ ...sl, want: metas[i] || {} })),
+    }
+  }
+
+  // 逐頁補回跑掉的設定。能讓後面的頁一起沿用就寫成 set，否則只寫在這一頁。
+  const keepLooks = (slides, globals) => {
+    const shown = (value, key) => (value !== undefined ? value : (globals[key] !== undefined ? globals[key] : NEUTRAL[key]))
+    let defaults = {}
+    return slides.map((entry, i) => {
+      // 只寫在這一頁、卻跟沿用下來的值一樣的設定是多餘的（之前搬動時補的），順手拿掉
+      const needed = entry.sticky
+        ? entry.kv
+        : entry.kv.filter(([k, v]) => PAGE_ONLY.includes(k) || shown(defaults[k], k) !== v)
+      const slide = needed.length === entry.kv.length ? entry : { ...entry, kv: needed, raw: null }
+      const own = Object.fromEntries(slide.kv)
+      const now = { ...defaults, ...own }
+      const keys = [...new Set([...Object.keys(now), ...Object.keys(slide.want)])].filter((k) => !PAGE_ONLY.includes(k))
+      const fixes = keys
+        .filter((k) => shown(now[k], k) !== shown(slide.want[k], k) && shown(slide.want[k], k) !== undefined)
+        .map((k) => [k, shown(slide.want[k], k)])
+      let next = slide
+      if (fixes.length > 0) {
+        const after = slides[i + 1]
+        const canCarry = slide.sticky || slide.kv.every(([k]) => PAGE_ONLY.includes(k))
+        const nextWantsSame = Boolean(after) && fixes.every(([k, v]) => shown(after.want[k], k) === v)
+        const fixed = Object.fromEntries(fixes)
+        next = {
+          ...slide,
+          raw: null,
+          sticky: slide.sticky || (canCarry && nextWantsSame),
+          kv: [...slide.kv.filter(([k]) => !(k in fixed)), ...fixes],
+        }
+      }
+      if (next.sticky) defaults = { ...defaults, ...carriedOn(Object.fromEntries(next.kv)) }
+      return next
+    })
+  }
+
+  const sepText = (slide) =>
+    ['---', ...(slide.sticky ? ['set'] : []), ...slide.bare, ...slide.kv.map(([k, v]) => k + '=' + v)].join(' ')
+
+  // 每頁內容前後各留一行空白，分隔線才不會黏著文字
+  const padded = (lines) => {
+    const body = [...lines]
+    while (body.length > 0 && body[0].trim() === '') body.shift()
+    while (body.length > 0 && body[body.length - 1].trim() === '') body.pop()
+    return body.length > 0 ? ['', ...body, ''] : ['']
+  }
+
+  const writePages = (head, globals, slides) => {
+    const out = [...head]
+    keepLooks(slides, globals).forEach((slide, i) => {
+      const hasTokens = slide.sticky || slide.bare.length > 0 || slide.kv.length > 0
+      // 第一頁沒有設定就不需要分隔線；沒被動過的分隔線照原樣寫回去
+      if (i > 0 || hasTokens) out.push(slide.raw !== null ? slide.raw : sepText(slide))
+      out.push(...padded(slide.lines))
+    })
+    // 檔案最前面不需要空行
+    if (head.length === 0 && out[0] === '') out.shift()
+    return out.join('\n')
+  }
+
+  // 複製第 index 頁，放在它後面。回傳 { text, index: 新那頁 }
+  const duplicateSlide = (text, index) => {
+    const { head, globals, slides } = readPages(text)
+    const src = slides[index]
+    if (!src) return { text, index }
+    // 副本只帶「只屬於這頁」的設定；沿用來的配色由 keepLooks 視需要補上
+    const copy = { ...src, raw: null, sticky: false, kv: src.kv.filter(([k]) => PAGE_ONLY.includes(k)), lines: [...src.lines] }
+    const next = [...slides.slice(0, index + 1), copy, ...slides.slice(index + 1)]
+    return { text: writePages(head, globals, next), index: index + 1 }
+  }
+
+  // 刪掉第 index 頁。只剩一頁時不動。回傳 { text, index: 刪完後該停在哪一頁 }
+  const deleteSlide = (text, index) => {
+    const { head, globals, slides } = readPages(text)
+    if (!slides[index] || slides.length < 2) return { text, index }
+    const next = [...slides.slice(0, index), ...slides.slice(index + 1)]
+    return { text: writePages(head, globals, next), index: Math.min(index, next.length - 1) }
+  }
+
+  // 把第 index 頁往前（delta = -1）或往後（+1）移一格。到頭了就不動。
+  const moveSlide = (text, index, delta) => {
+    const { head, globals, slides } = readPages(text)
+    const to = index + delta
+    if (!slides[index] || to < 0 || to >= slides.length || delta === 0) return { text, index }
+    const next = [...slides]
+    next[index] = slides[to]
+    next[to] = slides[index]
+    return { text: writePages(head, globals, next), index: to }
+  }
+
   const escapeHtml = (s) => s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -1267,7 +1442,7 @@ const SimpptParser = (() => {
 
   return {
     parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE,
-    setSlideDirectives, insertSlideAfter,
+    setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide,
   }
 })()
 </script>
@@ -2045,6 +2220,7 @@ const SaveLogic = (() => {
   const setStatus = (msg, ok = false) => {
     edStatus.textContent = msg
     edStatus.classList.toggle('ok', ok)
+    edStatus.classList.remove('has-action')
     refreshFileChip()
   }
 
@@ -2134,7 +2310,12 @@ const SaveLogic = (() => {
     const { from, count } = stripWindow(total, previewIdx)
     const wPx = Math.min(THUMB_MAX, (edPreviewBox.clientWidth - previewPad() * 2 - (count - 1) * STRIP_GAP) / count)
     for (let i = from; i < from + count; i += 1) {
-      edStrip.append(makeThumb(deck, i, wPx, i === previewIdx, jumpEditorToSlide))
+      const thumb = makeThumb(deck, i, wPx, i === previewIdx, jumpEditorToSlide)
+      thumb.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        openPageMenu(i, e.clientX, e.clientY)
+      })
+      edStrip.append(thumb)
     }
   }
 
@@ -2973,6 +3154,105 @@ const SaveLogic = (() => {
   })
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !presetPanel.hidden) closePresetPanel()
+  })
+
+  // --- 這一頁的操作：複製、新增、前後移、刪除 ---
+
+  const pageMenu = document.getElementById('page-menu')
+  const pageMenuTitle = document.getElementById('page-menu-title')
+  const edPageMore = document.getElementById('ed-page-more')
+  const NEW_PAGE_BODY = '# 標題'
+  const MENU_MARGIN = 8
+  let menuPage = 0
+  // 上一個整頁操作：before = 動之前的全文和頁碼，after = 動完的全文（還停在 after 才能復原）
+  let pageUndo = null
+
+  const PAGE_OPS = {
+    duplicate: { done: '已複製', run: (text, i) => SimpptParser.duplicateSlide(text, i) },
+    add: { done: '已新增一頁', run: (text, i) => SimpptParser.insertSlideAfter(text, i, '', NEW_PAGE_BODY) },
+    prev: { done: '已往前移', run: (text, i) => SimpptParser.moveSlide(text, i, -1) },
+    next: { done: '已往後移', run: (text, i) => SimpptParser.moveSlide(text, i, 1) },
+    delete: { done: '已刪除', run: (text, i) => SimpptParser.deleteSlide(text, i) },
+  }
+
+  const closePageMenu = () => {
+    pageMenu.hidden = true
+  }
+
+  const openPageMenu = (index, x, y) => {
+    const total = SimpptParser.parse(edText.value, { keepEmpty: true }).slides.length
+    menuPage = index
+    pageMenuTitle.textContent = '第 ' + (index + 1) + ' 頁'
+    pageMenu.querySelector('[data-op="prev"]').disabled = index === 0
+    pageMenu.querySelector('[data-op="next"]').disabled = index >= total - 1
+    pageMenu.querySelector('[data-op="delete"]').disabled = total < 2
+    pageMenu.hidden = false
+    // 先顯示才量得到大小，再把它收進視窗裡
+    const box = pageMenu.getBoundingClientRect()
+    pageMenu.style.left = Math.max(MENU_MARGIN, Math.min(x, window.innerWidth - box.width - MENU_MARGIN)) + 'px'
+    pageMenu.style.top = Math.max(MENU_MARGIN, Math.min(y, window.innerHeight - box.height - MENU_MARGIN)) + 'px'
+  }
+
+  const undoPageOp = () => {
+    if (!pageUndo || edText.value !== pageUndo.after) return false
+    const { before } = pageUndo
+    pageUndo = null
+    replaceEditorText(before.text)
+    jumpEditorToSlide(before.index)
+    setStatus('已復原')
+    return true
+  }
+
+  // 刪頁不跳確認視窗：直接做，旁邊放「復原」
+  const offerUndo = (label) => {
+    edStatus.textContent = label
+    edStatus.classList.remove('ok')
+    edStatus.classList.add('has-action')
+    const undo = document.createElement('button')
+    undo.type = 'button'
+    undo.textContent = '復原'
+    undo.title = '復原（Ctrl+Z）'
+    undo.addEventListener('click', undoPageOp)
+    edStatus.append(undo)
+  }
+
+  const runPageOp = (name) => {
+    const op = PAGE_OPS[name]
+    const before = { text: edText.value, index: previewIdx }
+    const out = op.run(before.text, menuPage)
+    closePageMenu()
+    if (out.text === before.text) return
+    replaceEditorText(out.text)
+    jumpEditorToSlide(out.index)
+    pageUndo = { before, after: edText.value }
+    offerUndo('第 ' + (menuPage + 1) + ' 頁' + op.done)
+  }
+
+  pageMenu.addEventListener('click', (e) => {
+    const item = e.target.closest('button[data-op]')
+    if (item && !item.disabled) runPageOp(item.dataset.op)
+  })
+  edPageMore.addEventListener('click', () => {
+    if (!pageMenu.hidden) {
+      closePageMenu()
+      return
+    }
+    const box = edPageMore.getBoundingClientRect()
+    openPageMenu(previewIdx, box.left, box.top - MENU_MARGIN - 250)
+  })
+  edViewport.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    openPageMenu(previewIdx, e.clientX, e.clientY)
+  })
+  document.addEventListener('pointerdown', (e) => {
+    if (pageMenu.hidden || pageMenu.contains(e.target) || edPageMore.contains(e.target)) return
+    closePageMenu()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !pageMenu.hidden) closePageMenu()
+    // 剛做完整頁操作、內容還沒再動過時，Ctrl+Z 把那個操作復原
+    const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.code === 'KeyZ' || e.key === 'z')
+    if (isUndo && !editor.hidden && undoPageOp()) e.preventDefault()
   })
 
   // --- 首頁：存在這台 decks/ 裡的簡報 ---

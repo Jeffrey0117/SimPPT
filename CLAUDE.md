@@ -33,6 +33,12 @@
 - 內容開始前的第一條分隔線是第一頁的設定（`leadSepLine`），不是分頁；`parse`、`slideIndexAt`、`slideLineRange` 三處要一致
 - 編輯器改分隔線一律走 `SimpptParser.setSlideDirectives`／`insertSlideAfter`（純函式，有測試），不要自己拼字串
 
+## 整頁操作
+
+- 複製／刪除／前後移是 parser 裡的 `duplicateSlide`、`deleteSlide`、`moveSlide`（純函式，有測試）。動完由 `keepLooks` 逐頁檢查：哪一頁的樣子跟原本不同，就在它的分隔線補回來（後面的頁也要一樣就寫成 `set`）。沒被動到的分隔線照原文寫回
+- 不變量：操作後每一頁的內容與實際生效的設定都跟原本一樣。改這段之前先跑 `npm test`
+- 刪頁不跳確認視窗，做完在狀態列放「復原」（`pageUndo`，只記一步，內容再被改動就失效）
+
 ## 架構要點
 
 - 單檔原則：不引外部依賴；favicon 是 inline SVG data URI
