@@ -235,7 +235,7 @@
   .deck-slide.layout-split .split-text h2 { font-size: calc(2.8vw * var(--ts, 1)); }
   .deck-slide.layout-split p { font-size: calc(2.1vw * var(--ts, 1)); line-height: 1.7; }
   /* 版型共用：靠左、從上面排下來的那一類 */
-  .deck-slide:is(.layout-bullets, .layout-cols, .layout-quote, .layout-section) {
+  .deck-slide:is(.layout-bullets, .layout-cols) {
     width: var(--cw, 84vw); height: 49.5vw; max-height: none;
     align-items: flex-start; text-align: left;
   }
@@ -277,25 +277,6 @@
   .deck-slide.layout-cols :is(p, ul, ol) { font-size: calc(2.1vw * var(--ts, 1)); line-height: 1.65; }
   .deck-slide.layout-cols.cols-auto :is(ul, ol) { columns: 2; column-gap: 5vw; width: 100%; }
   .deck-slide.layout-cols.cols-auto li { break-inside: avoid; }
-  /* 金句 */
-  .deck-slide.layout-quote { justify-content: center; gap: 2.2vw; }
-  .deck-slide.layout-quote::before {
-    content: "\201C"; font-family: Georgia, "Times New Roman", serif;
-    font-size: 13vw; line-height: 0.62; height: 5.4vw;
-    color: var(--accent, inherit);
-  }
-  .deck-slide.layout-quote :is(h1, h2, p:first-of-type) {
-    font-size: calc(4.2vw * var(--ts, 1)); font-weight: 700; line-height: 1.45;
-  }
-  .deck-slide.layout-quote p ~ p { font-size: calc(2vw * var(--ts, 1)); font-weight: 400; opacity: 0.65; }
-  /* 章節頁 */
-  .deck-slide.layout-section { justify-content: flex-end; gap: 1.6vw; padding-bottom: 5vw; }
-  .deck-slide.layout-section::before {
-    content: ""; width: 6vw; height: 0.5vw; margin-bottom: 1.2vw;
-    color: var(--accent, inherit); background: currentColor;
-  }
-  .deck-slide.layout-section h1 { font-size: calc(7vw * var(--ts, 1)); line-height: 1.15; letter-spacing: -0.02em; }
-  .deck-slide.layout-section p { font-size: calc(2.4vw * var(--ts, 1)); opacity: 0.7; }
   /* 大字 */
   .deck-slide.layout-big { gap: 1.2vw; }
   .deck-slide.layout-big h1 {
@@ -464,7 +445,7 @@
     padding: var(--space-5);
   }
   #preset-panel h3 { font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
-  #preset-layouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+  #preset-layouts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
   .preset {
     display: flex; flex-direction: column; gap: var(--space-2);
     padding: var(--space-2); text-align: left;
@@ -1789,7 +1770,7 @@ const SaveLogic = (() => {
     return state.blobUrls.get(hit.key)
   }
 
-  const LAYOUTS = ['top', 'split', 'bullets', 'cols', 'quote', 'section', 'big']
+  const LAYOUTS = ['top', 'split', 'bullets', 'cols', 'big']
   const MAX_COLS = 3
 
   const applyWidth = (container, width) => {
@@ -3345,10 +3326,9 @@ const SaveLogic = (() => {
 
   // --- 版型 ---
 
-  // 每個版型：id = 寫進分隔線的 layout 值（'' = 預設置中）、縮圖、插入新頁時的範例內容
+  // 每個版型：id = 寫進分隔線的 layout 值、縮圖、插入新頁時的範例內容
+  // 預設的置中不在這裡 — 那就是「在後面新增一頁」
   const LAYOUT_PRESETS = [
-    { id: '', name: '置中', art: '<rect x="14" y="10" width="20" height="3"/><rect x="18" y="16" width="12" height="1.5"/>',
-      body: '# 標題\n\n一句話說明。' },
     { id: 'top', name: '標題在上', art: '<rect x="5" y="5" width="18" height="3"/><rect x="5" y="11" width="30" height="1.5"/><rect x="5" y="14.5" width="24" height="1.5"/>',
       body: '# 這頁的標題\n\n內文寫在這裡，**重點**用粗體。' },
     { id: 'bullets', name: '列點', art: '<rect x="5" y="5" width="16" height="3"/><rect class="hot" x="5" y="11.5" width="2.5" height="1"/><rect x="9" y="11" width="22" height="1.5"/><rect class="hot" x="5" y="15.5" width="2.5" height="1"/><rect x="9" y="15" width="26" height="1.5"/><rect class="hot" x="5" y="19.5" width="2.5" height="1"/><rect x="9" y="19" width="18" height="1.5"/>',
@@ -3357,10 +3337,6 @@ const SaveLogic = (() => {
       body: '# 兩種做法\n\n## 左邊\n\n- 重點一\n- 重點二\n\n## 右邊\n\n- 重點一\n- 重點二' },
     { id: 'split', name: '左圖右文', art: '<rect x="5" y="5" width="16" height="3"/><rect x="5" y="11" width="16" height="11" rx="1" opacity="0.5"/><rect x="25" y="12" width="12" height="1.5"/><rect x="25" y="16" width="17" height="1.2"/><rect x="25" y="19" width="14" height="1.2"/>',
       body: '# 這張圖在說什麼\n\n![](圖片網址)\n\n## 小標\n\n文字寫在右邊。' },
-    { id: 'quote', name: '金句', art: '<rect class="hot" x="5" y="6" width="3" height="3"/><rect x="5" y="12" width="32" height="2.4"/><rect x="5" y="16.5" width="24" height="2.4"/><rect x="5" y="22" width="10" height="1"/>',
-      body: '一句你想讓人記住的話。\n\n出處或說話的人' },
-    { id: 'section', name: '章節頁', art: '<rect class="hot" x="5" y="13" width="7" height="1"/><rect x="5" y="16" width="26" height="4"/><rect x="5" y="22" width="16" height="1.2"/>',
-      body: '# 第二部分\n\n這一段要講什麼' },
     { id: 'big', name: '大字', art: '<rect class="hot" x="12" y="6" width="24" height="10"/><rect x="16" y="19" width="16" height="1.5"/>',
       body: '# 87%\n\n這個數字代表什麼' },
   ]
@@ -3394,7 +3370,7 @@ const SaveLogic = (() => {
 
   // 點一個版型：在目前這頁後面插入一頁，帶範例內容
   const usePreset = (preset) => {
-    const out = SimpptParser.insertSlideAfter(edText.value, previewIdx, preset.id ? ('layout=' + preset.id) : '', preset.body)
+    const out = SimpptParser.insertSlideAfter(edText.value, previewIdx, 'layout=' + preset.id, preset.body)
     replaceEditorText(out.text)
     jumpEditorToSlide(out.index)
     edText.focus()
