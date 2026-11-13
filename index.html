@@ -536,6 +536,9 @@
   #keys-grid dd { display: inline-flex; gap: 3px; justify-content: flex-end; white-space: nowrap; }
   @media (max-width: 640px) { #keys-grid { grid-template-columns: minmax(0, 1fr); } }
   #ed-pagebar { display: flex; align-items: center; gap: var(--space-1); }
+  /* 預覽區拿到鍵盤焦點（左右鍵換頁）時，投影片外框亮起來 */
+  #ed-preview:focus { outline: none; }
+  #ed-preview:focus #ed-viewport { box-shadow: 0 0 0 2px var(--color-neutral); }
   #ed-page-more { width: 28px; height: 28px; }
   /* 這一頁的操作（右鍵選單） */
   #page-menu {
@@ -732,6 +735,7 @@
   <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
   <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
   <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
@@ -857,7 +861,8 @@
     <button id="ed-save" class="btn btn-ghost" title="存檔（Ctrl+S）"><svg class="ic"><use href="#i-save"/></svg><span class="lbl">存檔</span></button>
     <button id="ed-presets" class="btn btn-ghost" title="版型與配色" aria-expanded="false"><svg class="ic"><use href="#i-layout"/></svg><span class="lbl">版型</span></button>
     <button id="ed-find" class="btn btn-ghost" title="搜尋並取代（Ctrl+H）"><svg class="ic"><use href="#i-search"/></svg><span class="lbl">取代</span></button>
-    <button id="ed-reset" class="btn btn-ghost" title="清掉此頁所有拖曳改動，回到 markdown 預設排版"><svg class="ic"><use href="#i-undo"/></svg><span class="lbl">還原版面</span></button>
+    <button id="ed-undo" class="btn btn-ghost" title="上一動（Ctrl+Z）" disabled><svg class="ic"><use href="#i-undo"/></svg><span class="lbl">上一動</span></button>
+    <button id="ed-redo" class="btn btn-ghost btn-icon" title="下一動（Ctrl+Y）" aria-label="下一動" disabled><svg class="ic"><use href="#i-redo"/></svg></button>
     <button id="ed-ai-revise" class="btn btn-ghost" title="跟 AI 說要怎麼調整這份簡報"><svg class="ic"><use href="#i-message"/></svg><span class="lbl">AI 編輯</span></button>
     <span class="bar-fill"></span>
     <span id="ed-status"></span>
@@ -907,7 +912,7 @@
       <button class="btn" data-act="clear" title="移除選取文字的樣式">清除</button>
     </div>
     <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
-    <div id="ed-preview">
+    <div id="ed-preview" tabindex="-1">
       <div id="ed-tools" class="mini-tools" hidden>
         <button class="btn btn-icon" data-act="bold" title="加粗整塊"><strong>B</strong></button>
         <button class="btn btn-icon" data-act="smaller" title="縮小字級" aria-label="縮小"><svg class="ic"><use href="#i-text-down"/></svg></button>
@@ -1532,6 +1537,44 @@ const FindReplace = (() => {
   }
 
   return { findAllMatches, replaceAllCaseInsensitive }
+})()
+</script>
+
+<script id="history-logic">
+// 編輯器的復原／重做。全部是純函式：收一份歷史，回一份新的。
+// 一個 state = { text, start, end, scroll }（全文、選取範圍、捲動位置）。
+const EditHistory = (() => {
+  'use strict'
+
+  const LIMIT = 200
+  const PAUSE_MS = 900 // 停手這麼久，下一個字就算新的一步
+  const BURST_MS = 5000 // 一口氣打再久，一步最多涵蓋這麼長
+
+  const start = (state) => ({ items: [state], at: 0, kind: 'op', burstStart: 0, lastAt: 0 })
+
+  const current = (h) => h.items[h.at]
+  const canUndo = (h) => h.at > 0
+  const canRedo = (h) => h.at < h.items.length - 1
+
+  // 記下編輯器現在的樣子。typing = 這次是打字造成的（連續打字會併成一步）。
+  const note = (h, state, { typing = false, now = 0 } = {}) => {
+    if (current(h).text === state.text) {
+      return { ...h, items: h.items.map((item, i) => (i === h.at ? state : item)) }
+    }
+    const sameBurst = typing && h.kind === 'typing' && !canRedo(h) && canUndo(h)
+      && now - h.lastAt < PAUSE_MS && now - h.burstStart < BURST_MS
+    if (sameBurst) return { ...h, items: [...h.items.slice(0, h.at), state], lastAt: now }
+    const items = [...h.items.slice(0, h.at + 1), state].slice(-LIMIT)
+    return { items, at: items.length - 1, kind: typing ? 'typing' : 'op', burstStart: now, lastAt: now }
+  }
+
+  // delta = -1 復原、+1 重做。走不動就原樣回傳。
+  const step = (h, delta) => {
+    const to = h.at + delta
+    return to < 0 || to >= h.items.length ? h : { ...h, at: to, kind: 'op' }
+  }
+
+  return { LIMIT, start, note, step, current, canUndo, canRedo }
 })()
 </script>
 
@@ -2240,6 +2283,54 @@ const SaveLogic = (() => {
   ].join('\n')
 
   let edDirty = false
+
+  // --- 上一動／下一動 ---
+  // 每次內容有變（打字、拖曳、版型、整頁操作…）都會經過 scheduleSave，歷史就掛在那裡記，
+  // 不必每個改字的地方各記一次。
+  const edUndoBtn = document.getElementById('ed-undo')
+  const edRedoBtn = document.getElementById('ed-redo')
+  let history = null
+  let typedSinceNote = false
+
+  const editorSnapshot = () => ({
+    text: edText.value, start: edText.selectionStart, end: edText.selectionEnd, scroll: edText.scrollTop,
+  })
+
+  const refreshHistoryButtons = () => {
+    edUndoBtn.disabled = !history || !EditHistory.canUndo(history)
+    edRedoBtn.disabled = !history || !EditHistory.canRedo(history)
+  }
+
+  const noteHistory = () => {
+    if (editor.hidden) return
+    const snap = editorSnapshot()
+    history = history
+      ? EditHistory.note(history, snap, { typing: typedSinceNote, now: Date.now() })
+      : EditHistory.start(snap)
+    typedSinceNote = false
+    refreshHistoryButtons()
+  }
+
+  // delta = -1 上一動、+1 下一動。沒得走就回 false。
+  const stepHistory = (delta) => {
+    if (!history) return false
+    const next = EditHistory.step(history, delta)
+    if (next === history) return false
+    history = next
+    const to = EditHistory.current(history)
+    edText.value = to.text
+    edText.setSelectionRange(to.start, to.end)
+    edText.scrollTop = to.scroll
+    edDirty = !SaveLogic.sameText(to.text, state.cleanText)
+    edStrip.dataset.key = '' // 縮圖的長相可能變了，強制重畫
+    updatePreview(true)
+    setStatus(delta < 0 ? '已回到上一動' : '已重做')
+    scheduleSave()
+    return true
+  }
+
+  edUndoBtn.addEventListener('click', () => stepHistory(-1))
+  edRedoBtn.addEventListener('click', () => stepHistory(1))
   // 這次存檔的結果：saving / failed；savedAt = 最後一次確認內容寫進檔案的時間
   let saveFlags = { saving: false, failed: false, savedAt: 0 }
   // 這個 server 能不能把簡報存進 decks/（開機時問一次 /__decks）
@@ -2453,11 +2544,14 @@ const SaveLogic = (() => {
     }
   }
 
-  const enterEditor = (text) => {
+  // keepHistory = 這是同一份簡報的下一個版本（例如 AI 改完），要能按上一動回去
+  const enterEditor = (text, { keepHistory = false } = {}) => {
     stopTimer()
     landing.hidden = true
     stage.hidden = true
     editor.hidden = false
+    // 換了一份內容就從頭記；從播放回來（內容一樣）則接著原本的歷史
+    if (!keepHistory && history && EditHistory.current(history).text !== text) history = null
     edText.value = text
     edDirty = !SaveLogic.sameText(text, state.cleanText)
     saveFlags = { saving: false, failed: false, savedAt: 0 }
@@ -2802,19 +2896,6 @@ const SaveLogic = (() => {
       cursor += it.h + gap
     }
     setEditorText(lines)
-  }
-
-  const resetSlideLayout = () => {
-    const ctx = currentSlideLines()
-    if (!ctx) return
-    let changed = false
-    const nextLines = ctx.lines.map((line, j) => {
-      if (j < ctx.range.start || j >= ctx.range.end || line.trim() === '') return line
-      const next = rewriteBlockLine(line, null)
-      if (next !== line) changed = true
-      return next
-    })
-    if (changed) setEditorText(nextLines)
   }
 
   const guideV = document.getElementById('guide-v')
@@ -3321,8 +3402,6 @@ const SaveLogic = (() => {
   const NEW_PAGE_BODY = '# 標題'
   const MENU_MARGIN = 8
   let menuPage = 0
-  // 上一個整頁操作：before = 動之前的全文和頁碼，after = 動完的全文（還停在 after 才能復原）
-  let pageUndo = null
 
   const PAGE_OPS = {
     duplicate: { done: '已複製', run: (text, i) => SimpptParser.duplicateSlide(text, i) },
@@ -3350,16 +3429,6 @@ const SaveLogic = (() => {
     pageMenu.style.top = Math.max(MENU_MARGIN, Math.min(y, window.innerHeight - box.height - MENU_MARGIN)) + 'px'
   }
 
-  const undoPageOp = () => {
-    if (!pageUndo || edText.value !== pageUndo.after) return false
-    const { before } = pageUndo
-    pageUndo = null
-    replaceEditorText(before.text)
-    jumpEditorToSlide(before.index)
-    setStatus('已復原')
-    return true
-  }
-
   // 刪頁不跳確認視窗：直接做，旁邊放「復原」
   const offerUndo = (label) => {
     edStatus.textContent = label
@@ -3368,8 +3437,8 @@ const SaveLogic = (() => {
     const undo = document.createElement('button')
     undo.type = 'button'
     undo.textContent = '復原'
-    undo.title = '復原（Ctrl+Z）'
-    undo.addEventListener('click', undoPageOp)
+    undo.title = '上一動（Ctrl+Z）'
+    undo.addEventListener('click', () => stepHistory(-1))
     edStatus.append(undo)
   }
 
@@ -3378,7 +3447,7 @@ const SaveLogic = (() => {
     if (out.text === before.text) return
     replaceEditorText(out.text)
     jumpEditorToSlide(out.index)
-    pageUndo = { before, after: edText.value }
+    scheduleSave() // 把跳頁之後的游標位置記進這一步
     offerUndo(label)
   }
 
@@ -3412,9 +3481,26 @@ const SaveLogic = (() => {
   })
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !pageMenu.hidden) closePageMenu()
-    // 剛做完整頁操作、內容還沒再動過時，Ctrl+Z 把那個操作復原
-    const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.code === 'KeyZ' || e.key === 'z')
-    if (isUndo && !editor.hidden && undoPageOp()) e.preventDefault()
+  })
+
+  // --- 預覽區的鍵盤操作 ---
+
+  // 點預覽區就把鍵盤焦點帶過來，之後左右鍵是換頁，不是在左邊移動游標
+  edPreviewBox.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button, input, a, .mini-tools')) return
+    edPreviewBox.focus({ preventScroll: true })
+  })
+
+  edPreviewBox.addEventListener('keydown', (e) => {
+    if (e.target !== edPreviewBox || e.ctrlKey || e.metaKey || e.altKey) return
+    const back = ['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)
+    const forward = ['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)
+    const total = SimpptParser.parse(edText.value, { keepEmpty: true }).slides.length
+    if (e.key === 'Home') jumpEditorToSlide(0)
+    else if (e.key === 'End') jumpEditorToSlide(Math.max(0, total - 1))
+    else if (back || forward) jumpToAdjacentSlide(back ? -1 : 1)
+    else return
+    e.preventDefault()
   })
 
   // --- 首頁：存在這台 decks/ 裡的簡報 ---
@@ -3562,7 +3648,7 @@ const SaveLogic = (() => {
         state.cleanText = null
       }
       // AI 給的內容還沒寫進任何檔案 — enterEditor 會拿它跟 cleanText 比，標成有未存的變更
-      enterEditor(data.markdown)
+      enterEditor(data.markdown, { keepHistory: genMode === 'revise' })
     } catch (err) {
       genError.textContent = `連線失敗：${err.message}`
     } finally {
@@ -3580,11 +3666,17 @@ const SaveLogic = (() => {
     if (findMatches.length === 0) return
     const start = findMatches[findCurrent]
     const len = findQueryInput.value.length
+    // 焦點要留在搜尋列：不然打第二個字、或按 Enter 找下一個，都會直接打進簡報、蓋掉選到的字
+    const typingIn = [findQueryInput, findReplacementInput].includes(document.activeElement)
+      ? document.activeElement
+      : null
     edText.focus()
     edText.setSelectionRange(start, start + len)
     const lineHeight = parseFloat(getComputedStyle(edText).lineHeight) || 22
     const linesBefore = edText.value.slice(0, start).split('\n').length - 1
     edText.scrollTop = Math.max(0, linesBefore * lineHeight - edText.clientHeight / 2)
+    updatePreview(true) // 右邊跟著跳到找到的那一頁
+    if (typingIn) typingIn.focus()
   }
 
   const recomputeFindMatches = () => {
@@ -3678,7 +3770,6 @@ const SaveLogic = (() => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {})
   })
   edSaveBtn.addEventListener('click', saveDeck)
-  document.getElementById('ed-reset').addEventListener('click', resetSlideLayout)
 
   document.getElementById('ed-home').addEventListener('click', () => {
     if (edDirty && !window.confirm('有未儲存的變更，確定回首頁？')) return
@@ -3691,7 +3782,11 @@ const SaveLogic = (() => {
     loadDeckList()
   })
 
-  edText.addEventListener('input', () => {
+  // 連續打字、刪字會併成一步；貼上和程式改的內容各自算一步
+  const TYPING_INPUTS = /^(insertText|insertCompositionText|deleteContentBackward|deleteContentForward)$/
+
+  edText.addEventListener('input', (e) => {
+    typedSinceNote = e.isTrusted && TYPING_INPUTS.test(e.inputType || '')
     edDirty = true
     setStatus('')
     updatePreview(true)
@@ -3791,9 +3886,11 @@ const SaveLogic = (() => {
       ['在後面新增一頁', ['Ctrl', 'M']],
       ['這一頁往前／往後移', ['Ctrl', 'Shift', '↑ ↓']],
       ['刪除這一頁', ['Ctrl', 'Shift', 'Backspace']],
-      ['復原剛才的頁面操作', ['Ctrl', 'Z']],
+      ['點一下右邊預覽後換頁', ['← →']],
     ] },
     { title: '寫字', rows: [
+      ['上一動', ['Ctrl', 'Z']],
+      ['下一動（重做）', ['Ctrl', 'Y']],
       ['粗體（會帶重點色）', ['Ctrl', 'B']],
       ['斜體', ['Ctrl', 'I']],
       ['清單自動接下一點', ['Enter']],
@@ -3895,7 +3992,14 @@ const SaveLogic = (() => {
     if (!dialogOpen()) {
       const up = ['ArrowUp', 'ArrowLeft'].includes(e.key)
       const down = ['ArrowDown', 'ArrowRight'].includes(e.key)
+      // 游標在搜尋框之類的別的輸入框裡時，Ctrl+Z 留給那個輸入框自己用
+      const field = document.activeElement
+      const inOtherField = Boolean(field) && field !== edText && /^(INPUT|TEXTAREA|SELECT)$/.test(field.tagName)
       const handled = (() => {
+        if (!inOtherField && (e.code === 'KeyZ' || e.code === 'KeyY')) {
+          stepHistory(e.code === 'KeyY' || e.shiftKey ? 1 : -1)
+          return true
+        }
         if (e.shiftKey && (up || down)) return pageOpHere(up ? 'prev' : 'next') || true
         if (e.shiftKey && e.key === 'Backspace') return pageOpHere('delete') || true
         if (e.shiftKey && e.key === 'Enter') return playFromEditor(true) || true
@@ -4341,6 +4445,7 @@ const SaveLogic = (() => {
 
   let saveTimer = null
   const scheduleSave = () => {
+    noteHistory()
     clearTimeout(saveTimer)
     saveTimer = setTimeout(saveSession, 300)
   }
