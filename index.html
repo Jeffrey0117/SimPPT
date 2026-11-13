@@ -463,16 +463,7 @@
     background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-l);
     padding: var(--space-5);
   }
-  .preset-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-  .preset-head h3, .preset-sub { font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
-  .preset-sub small { font-weight: 400; color: var(--color-neutral); margin-left: var(--space-2); }
-  .seg { display: inline-flex; padding: 2px; background: var(--color-well); border: 1px solid var(--color-rule); border-radius: var(--radius-m); }
-  .seg button {
-    height: 26px; padding: 0 var(--space-3);
-    font: inherit; font-size: var(--text-xs); color: var(--color-neutral);
-    background: none; border: 0; border-radius: var(--radius-s); cursor: pointer;
-  }
-  .seg button[aria-pressed="true"] { background: var(--color-paper-4); color: var(--color-ink); }
+  #preset-panel h3 { font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
   #preset-layouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
   .preset {
     display: flex; flex-direction: column; gap: var(--space-2);
@@ -482,25 +473,9 @@
     transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
   }
   .preset:hover { color: var(--color-ink); border-color: var(--color-rule-2); background: var(--color-paper-3); }
-  .preset.on { color: var(--color-ink); border-color: var(--color-accent); }
   .preset svg { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--color-well); color: var(--color-neutral); }
-  .preset.on svg, .preset:hover svg { color: var(--color-muted); }
+  .preset:hover svg { color: var(--color-muted); }
   .preset svg .hot { fill: var(--color-accent); }
-  #preset-colors { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .tone {
-    display: inline-flex; align-items: center; gap: var(--space-2);
-    height: 34px; padding: 0 var(--space-3) 0 var(--space-1);
-    font: inherit; font-size: var(--text-sm); color: var(--color-muted);
-    background: none; border: 1px solid var(--color-rule); border-radius: var(--radius-m); cursor: pointer;
-    transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
-  }
-  .tone:hover { color: var(--color-ink); border-color: var(--color-rule-2); }
-  .tone i {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 40px; height: 24px; border-radius: 4px; border: 1px solid var(--color-rule-2);
-    font-style: normal; font-size: 12px; font-weight: 700;
-  }
-  .tone i b { margin-left: 1px; }
   @media (max-width: 640px) { #preset-layouts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   #ed-viewport {
     position: relative;
@@ -865,7 +840,7 @@
     <button id="ed-present" class="btn btn-ghost" title="開觀眾視窗（拿去錄影），這個視窗變講者台"><svg class="ic"><use href="#i-mic"/></svg><span class="lbl">講者</span></button>
     <span class="bar-sep"></span>
     <button id="ed-save" class="btn btn-ghost" title="存檔（Ctrl+S）"><svg class="ic"><use href="#i-save"/></svg><span class="lbl">存檔</span></button>
-    <button id="ed-presets" class="btn btn-ghost" title="版型與配色" aria-expanded="false"><svg class="ic"><use href="#i-layout"/></svg><span class="lbl">版型</span></button>
+    <button id="ed-presets" class="btn btn-ghost" title="插入一頁有版型的新頁" aria-expanded="false"><svg class="ic"><use href="#i-layout"/></svg><span class="lbl">版型</span></button>
     <button id="ed-find" class="btn btn-ghost" title="搜尋並取代（Ctrl+H）"><svg class="ic"><use href="#i-search"/></svg><span class="lbl">取代</span></button>
     <button id="ed-undo" class="btn btn-ghost" title="上一動（Ctrl+Z）" disabled><svg class="ic"><use href="#i-undo"/></svg><span class="lbl">上一動</span></button>
     <button id="ed-redo" class="btn btn-ghost btn-icon" title="下一動（Ctrl+Y）" aria-label="下一動" disabled><svg class="ic"><use href="#i-redo"/></svg></button>
@@ -884,16 +859,8 @@
   </div>
   <div id="editor-body">
     <div id="preset-panel" hidden>
-      <div class="preset-head">
-        <h3>版型</h3>
-        <div class="seg" role="group" aria-label="版型要用在哪裡">
-          <button type="button" id="preset-mode-apply" aria-pressed="true">套用到這一頁</button>
-          <button type="button" id="preset-mode-insert" aria-pressed="false">插入新的一頁</button>
-        </div>
-      </div>
+      <h3>在這頁後面插入一頁</h3>
       <div id="preset-layouts"></div>
-      <div class="preset-sub">配色<small>從這一頁起都換</small></div>
-      <div id="preset-colors"></div>
     </div>
     <div id="find-bar" hidden>
       <input type="text" id="find-query" placeholder="搜尋…">
@@ -940,7 +907,7 @@
       <div id="ed-strip"></div>
       <div id="ed-pagebar">
         <span id="ed-pageinfo"></span>
-        <button id="ed-page-more" class="btn btn-ghost btn-icon" title="這一頁的操作（也可以在投影片或縮圖上按右鍵）" aria-label="這一頁的操作"><svg class="ic"><use href="#i-more"/></svg></button>
+        <button id="ed-page-more" class="btn btn-ghost btn-icon" title="這一頁的操作（也可以在縮圖上按右鍵）" aria-label="這一頁的操作"><svg class="ic"><use href="#i-more"/></svg></button>
       </div>
       <button id="ed-keys" class="btn btn-ghost" title="看所有快捷鍵">快捷鍵<kbd>Ctrl</kbd><kbd>/</kbd></button>
     </div>
@@ -2463,7 +2430,6 @@ const SaveLogic = (() => {
     updateEdStrip(deck)
     selectedKs = new Set([...selectedKs].filter((k) => previewBlocks[k]))
     applySelectionClasses()
-    if (!presetPanel.hidden) markCurrentPreset()
   }
 
   const edStrip = document.getElementById('ed-strip')
@@ -2606,14 +2572,14 @@ const SaveLogic = (() => {
     scheduleSave()
   }
 
-  const playFromEditor = (fromStart = false) => {
+  const playFromEditor = () => {
     const text = edText.value
     const deck = SimpptParser.parse(text)
     if (deck.slides.length === 0) {
       showToast('目前內容解析不出任何頁面')
       return
     }
-    const target = fromStart ? 0 : deck.slides.findIndex((s) => s.raw >= previewIdx)
+    const target = deck.slides.findIndex((s) => s.raw >= previewIdx)
     state.index = target >= 0 ? target : deck.slides.length - 1
     loadDeck(text, state.mdPath || '未命名.md', state.fileMap)
     if (state.fileHandle || state.dirHandle) startHandleWatch()
@@ -3377,7 +3343,7 @@ const SaveLogic = (() => {
     }, 150)
   })
 
-  // --- 版型與配色 ---
+  // --- 版型 ---
 
   // 每個版型：id = 寫進分隔線的 layout 值（'' = 預設置中）、縮圖、插入新頁時的範例內容
   const LAYOUT_PRESETS = [
@@ -3399,23 +3365,11 @@ const SaveLogic = (() => {
       body: '# 87%\n\n這個數字代表什麼' },
   ]
 
-  const COLOR_PRESETS = [
-    { name: '黑底', bg: '#0d0d0f', color: '#f5f5f5', accent: '#f4b860' },
-    { name: '白底', bg: '#ffffff', color: '#1c1c1e', accent: '#d84a3f' },
-    { name: '米色', bg: '#f3ede2', color: '#2a2622', accent: '#b4532a' },
-    { name: '深藍', bg: '#101a2e', color: '#eef2f8', accent: '#7fb0ff' },
-    { name: '墨綠', bg: '#12211c', color: '#eef3ee', accent: '#8fd0a8' },
-  ]
-
   const edPresetsBtn = document.getElementById('ed-presets')
   const presetPanel = document.getElementById('preset-panel')
   const presetLayouts = document.getElementById('preset-layouts')
-  const presetColors = document.getElementById('preset-colors')
-  const presetModeApply = document.getElementById('preset-mode-apply')
-  const presetModeInsert = document.getElementById('preset-mode-insert')
-  let presetMode = 'apply'
 
-  // 把整份文字換掉（版型、配色、插頁用）— 跟手動打字走同一條路，才會標成未存、更新預覽
+  // 把整份文字換掉（插頁、整頁操作用）— 跟手動打字走同一條路，才會標成未存、更新預覽
   const replaceEditorText = (text) => {
     const scroll = edText.scrollTop
     const caret = edText.selectionStart
@@ -3433,55 +3387,17 @@ const SaveLogic = (() => {
     edText.scrollTop = scroll
     edDirty = true
     setStatus('')
-    edStrip.dataset.key = '' // 版型和配色會改到縮圖的長相，強制重畫縮圖列
+    edStrip.dataset.key = '' // 強制重畫縮圖列
     updatePreview()
     scheduleSave()
   }
 
-  // 目前這頁實際生效的版型（'' = 置中）
-  const currentLayout = () => {
-    const deck = SimpptParser.parse(edText.value, { keepEmpty: true })
-    const slide = deck.slides[previewIdx]
-    const layout = { ...deck.globals, ...(slide ? slide.meta : {}) }.layout
-    return { layout: LAYOUTS.includes(layout) ? layout : '', globalLayout: deck.globals.layout }
-  }
-
-  const markCurrentPreset = () => {
-    const { layout } = currentLayout()
-    for (const card of presetLayouts.children) {
-      card.classList.toggle('on', presetMode === 'apply' && card.dataset.layout === layout)
-    }
-  }
-
-  const applyPresetToPage = (preset) => {
-    // 置中 = 拿掉 layout；但整份簡報在 frontmatter 設了別的版型時，要明講這頁用置中
-    const { globalLayout } = currentLayout()
-    const value = preset.id || (globalLayout ? 'center' : null)
-    replaceEditorText(SimpptParser.setSlideDirectives(edText.value, previewIdx, { layout: value }))
-    markCurrentPreset()
-  }
-
+  // 點一個版型：在目前這頁後面插入一頁，帶範例內容
   const usePreset = (preset) => {
-    if (presetMode === 'insert') {
-      const out = SimpptParser.insertSlideAfter(edText.value, previewIdx, preset.id ? ('layout=' + preset.id) : '', preset.body)
-      replaceEditorText(out.text)
-      jumpEditorToSlide(out.index)
-      edText.focus()
-      return
-    }
-    applyPresetToPage(preset)
-  }
-
-  const useColors = (tone) => {
-    const { bg, color, accent } = tone
-    replaceEditorText(SimpptParser.setSlideDirectives(edText.value, previewIdx, { bg, color, accent }, { sticky: true }))
-  }
-
-  const setPresetMode = (mode) => {
-    presetMode = mode
-    presetModeApply.setAttribute('aria-pressed', String(mode === 'apply'))
-    presetModeInsert.setAttribute('aria-pressed', String(mode === 'insert'))
-    markCurrentPreset()
+    const out = SimpptParser.insertSlideAfter(edText.value, previewIdx, preset.id ? ('layout=' + preset.id) : '', preset.body)
+    replaceEditorText(out.text)
+    jumpEditorToSlide(out.index)
+    edText.focus()
   }
 
   const buildPresetPanel = () => {
@@ -3496,22 +3412,6 @@ const SaveLogic = (() => {
       card.addEventListener('click', () => usePreset(preset))
       return card
     }))
-    presetColors.replaceChildren(...COLOR_PRESETS.map((tone) => {
-      const chip = document.createElement('button')
-      chip.type = 'button'
-      chip.className = 'tone'
-      const swatch = document.createElement('i')
-      swatch.style.background = tone.bg
-      swatch.style.color = tone.color
-      swatch.textContent = 'A'
-      const mark = document.createElement('b')
-      mark.style.color = tone.accent
-      mark.textContent = 'a'
-      swatch.append(mark)
-      chip.append(swatch, tone.name)
-      chip.addEventListener('click', () => useColors(tone))
-      return chip
-    }))
   }
 
   const closePresetPanel = () => {
@@ -3525,12 +3425,9 @@ const SaveLogic = (() => {
     presetPanel.style.left = Math.max(12, edPresetsBtn.getBoundingClientRect().left - bodyLeft) + 'px'
     presetPanel.hidden = false
     edPresetsBtn.setAttribute('aria-expanded', 'true')
-    markCurrentPreset()
   }
 
   edPresetsBtn.addEventListener('click', () => (presetPanel.hidden ? openPresetPanel() : closePresetPanel()))
-  presetModeApply.addEventListener('click', () => setPresetMode('apply'))
-  presetModeInsert.addEventListener('click', () => setPresetMode('insert'))
   document.addEventListener('pointerdown', (e) => {
     if (presetPanel.hidden || presetPanel.contains(e.target) || edPresetsBtn.contains(e.target)) return
     closePresetPanel()
@@ -3615,10 +3512,6 @@ const SaveLogic = (() => {
     }
     const box = edPageMore.getBoundingClientRect()
     openPageMenu(previewIdx, box.left, box.top - MENU_MARGIN - 250)
-  })
-  edViewport.addEventListener('contextmenu', (e) => {
-    e.preventDefault()
-    openPageMenu(previewIdx, e.clientX, e.clientY)
   })
   document.addEventListener('pointerdown', (e) => {
     if (pageMenu.hidden || pageMenu.contains(e.target) || edPageMore.contains(e.target)) return
@@ -4021,7 +3914,6 @@ const SaveLogic = (() => {
     { title: '檔案與播放', rows: [
       ['存檔', ['Ctrl', 'S']],
       ['從這一頁播放', ['Ctrl', 'Enter']],
-      ['從第一頁播放', ['Ctrl', 'Shift', 'Enter']],
       ['搜尋並取代', ['Ctrl', 'H']],
       ['這張快捷鍵表', ['Ctrl', '/']],
     ] },
@@ -4029,8 +3921,6 @@ const SaveLogic = (() => {
       ['上一頁／下一頁', ['Ctrl', '↑ ↓']],
       ['複製這一頁', ['Ctrl', 'D']],
       ['在後面新增一頁', ['Ctrl', 'M']],
-      ['這一頁往前／往後移', ['Ctrl', 'Shift', '↑ ↓']],
-      ['刪除這一頁', ['Ctrl', 'Shift', 'Backspace']],
       ['點一下右邊預覽後換頁', ['← →']],
     ] },
     { title: '寫字', rows: [
@@ -4040,7 +3930,6 @@ const SaveLogic = (() => {
       ['斜體', ['Ctrl', 'I']],
       ['清單自動接下一點', ['Enter']],
       ['在預覽上改字', ['雙擊文字']],
-      ['套用版型（依面板順序）', ['Alt', '1 – 8']],
     ] },
     { title: '播放中', rows: [
       ['翻頁', ['← →', '空白鍵']],
@@ -4113,17 +4002,6 @@ const SaveLogic = (() => {
     edText.dispatchEvent(new Event('input'))
   })
 
-  // Alt+數字：把目前這頁換成面板上第幾個版型
-  document.addEventListener('keydown', (e) => {
-    if (editor.hidden || !e.altKey || e.ctrlKey || e.metaKey || dialogOpen() || blockEdit) return
-    const n = /^Digit([1-9])$/.exec(e.code)
-    const preset = n && LAYOUT_PRESETS[Number(n[1]) - 1]
-    if (!preset) return
-    e.preventDefault()
-    applyPresetToPage(preset)
-    setStatus('版型：' + preset.name)
-  })
-
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !keysModal.hidden) {
       closeKeysSheet()
@@ -4148,9 +4026,6 @@ const SaveLogic = (() => {
           stepHistory(e.code === 'KeyY' || e.shiftKey ? 1 : -1)
           return true
         }
-        if (e.shiftKey && (up || down)) return pageOpHere(up ? 'prev' : 'next') || true
-        if (e.shiftKey && e.key === 'Backspace') return pageOpHere('delete') || true
-        if (e.shiftKey && e.key === 'Enter') return playFromEditor(true) || true
         if (!e.shiftKey && e.code === 'KeyD') return pageOpHere('duplicate') || true
         if (!e.shiftKey && e.code === 'KeyM') return pageOpHere('add') || true
         if (!e.shiftKey && e.code === 'KeyI' && document.activeElement === edText) return inlineItalic() || true
