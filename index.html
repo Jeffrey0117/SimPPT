@@ -286,9 +286,9 @@
     background: var(--color-paper);
   }
   #editor-bar {
-    display: flex; align-items: center; gap: var(--space-1);
-    height: 52px; padding: 0 var(--space-3);
-    background: var(--color-paper-2); border-bottom: 1px solid var(--color-rule);
+    display: flex; align-items: center; gap: var(--space-2);
+    height: 64px; padding: 0 var(--space-5);
+    background: var(--color-paper); border-bottom: 1px solid var(--color-rule);
   }
   .bar-sep { width: 1px; height: 20px; margin: 0 var(--space-2); background: var(--color-rule-2); flex: none; }
   .bar-fill { flex: 1; min-width: var(--space-3); }
@@ -329,9 +329,13 @@
     .btn, .act, .deck-open, .deck-play { transition: none; }
   }
   @media (max-width: 1180px) {
+    #editor-bar { height: 56px; padding: 0 var(--space-4); gap: var(--space-1); }
     #editor-bar .btn-ghost .lbl { display: none; }
     #editor-bar .btn-ghost { width: 34px; padding: 0; }
     #ed-status { display: none; }
+    #ed-text { padding: var(--space-6) var(--space-6) var(--space-7); }
+    #ed-preview { padding: var(--space-5); }
+    #txt-tools, #find-bar { left: var(--space-6); }
   }
 
   #editor-body { flex: 1; display: flex; min-height: 0; position: relative; }
@@ -339,16 +343,16 @@
     flex: 1; resize: none; border: 0; outline: none;
     background: var(--color-paper); color: var(--color-ink);
     font: 15px/1.7 var(--font-mono);
-    padding: 20px 24px;
+    padding: var(--space-7) var(--space-8) var(--space-8);
   }
   #ed-text::placeholder { color: var(--color-neutral); }
   #ed-preview {
     position: relative;
-    width: 46%; min-width: 320px;
+    width: 44%; min-width: 320px;
     border-left: 1px solid var(--color-rule);
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 10px;
-    background: var(--color-well); overflow: hidden; padding: 16px;
+    align-items: center; justify-content: center; gap: var(--space-4);
+    background: var(--color-well); overflow: hidden; padding: var(--space-7);
   }
   .mini-tools {
     position: absolute; display: flex; gap: 6px; align-items: center; z-index: 6;
@@ -358,7 +362,7 @@
   .mini-tools .btn { height: 26px; padding: 0 var(--space-2); font-size: var(--text-sm); border-radius: var(--radius-s); }
   .mini-tools .btn-icon { width: 28px; padding: 0; }
   #find-bar {
-    position: absolute; top: 10px; left: 10px; z-index: 10;
+    position: absolute; top: var(--space-3); left: var(--space-8); z-index: 10;
     display: flex; align-items: center; gap: 6px;
     background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
     padding: 6px;
@@ -373,8 +377,8 @@
   #find-bar .btn { height: 30px; font-size: var(--text-sm); border-radius: var(--radius-s); }
   #find-bar .btn-icon { width: 30px; }
   #find-count { font-size: var(--text-xs); color: var(--color-neutral); min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
-  #ed-tools { top: 8px; left: 50%; transform: translateX(-50%); }
-  #txt-tools { top: 8px; left: 14px; }
+  #ed-tools { top: var(--space-3); left: 50%; transform: translateX(-50%); }
+  #txt-tools { top: var(--space-3); left: var(--space-8); }
   .mini-tools .swatch {
     width: 18px; height: 18px; border-radius: 4px; cursor: pointer;
     border: 1px solid var(--color-rule-2);
@@ -404,7 +408,7 @@
   }
   #ed-pageinfo { font-size: var(--text-md); color: var(--color-muted); font-variant-numeric: tabular-nums; }
   #ed-shortcuts { font-size: var(--text-xs); color: var(--color-neutral); }
-  #ed-strip { display: flex; gap: 8px; justify-content: center; }
+  #ed-strip { display: flex; gap: 10px; justify-content: center; margin-top: var(--space-2); }
 
   /* --- 播放 --- */
   #indicator {
@@ -1810,9 +1814,17 @@ const SaveLogic = (() => {
     refreshFileChip()
   }
 
+  // 預覽區的留白跟著樣式走（寬窄螢幕不同），不要在這裡寫死
+  const previewPad = () => parseFloat(getComputedStyle(edPreviewBox).paddingLeft) || 16
+  // 投影片下方那排東西（縮圖列、頁碼、快捷鍵提示）要留的高度
+  const PREVIEW_BELOW = 170
+  const STRIP_GAP = 10
+  const THUMB_MAX = 124
+
   const fitPreview = () => {
-    const w = edPreviewBox.clientWidth - 32
-    const h = edPreviewBox.clientHeight - 64
+    const pad = previewPad()
+    const w = edPreviewBox.clientWidth - pad * 2
+    const h = edPreviewBox.clientHeight - pad * 2 - PREVIEW_BELOW
     const scale = Math.max(0.05, Math.min(w / window.innerWidth, h / (window.innerWidth * 0.5625)))
     edViewport.style.width = `${window.innerWidth * scale}px`
     edViewport.style.height = `${window.innerWidth * 0.5625 * scale}px`
@@ -1885,7 +1897,7 @@ const SaveLogic = (() => {
     const total = deck.slides.length
     if (total < 2) return
     const { from, count } = stripWindow(total, previewIdx)
-    const wPx = Math.min(150, (edPreviewBox.clientWidth - 32 - (count - 1) * 8) / count)
+    const wPx = Math.min(THUMB_MAX, (edPreviewBox.clientWidth - previewPad() * 2 - (count - 1) * STRIP_GAP) / count)
     for (let i = from; i < from + count; i += 1) {
       edStrip.append(makeThumb(deck, i, wPx, i === previewIdx, jumpEditorToSlide))
     }
