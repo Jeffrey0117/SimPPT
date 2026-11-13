@@ -4,57 +4,180 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SimPPT</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236c9ef8'/%3E%3Cstop offset='1' stop-color='%23e94560'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='10' width='56' height='44' rx='9' fill='url(%23g)'/%3E%3Crect x='12' y='22' width='26' height='7' rx='3.5' fill='%23ffffff'/%3E%3Crect x='12' y='36' width='36' height='4' rx='2' fill='%23ffffffb3'/%3E%3Crect x='12' y='44' width='28' height='4' rx='2' fill='%23ffffffb3'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='10' width='56' height='44' rx='9' fill='%23221f1b'/%3E%3Crect x='12' y='22' width='26' height='7' rx='3.5' fill='%23e9b558'/%3E%3Crect x='12' y='36' width='36' height='4' rx='2' fill='%23efece6'/%3E%3Crect x='12' y='44' width='28' height='4' rx='2' fill='%23efece6'/%3E%3C/svg%3E">
 <style>
+  /* Hallmark · scope: app chrome (not the slides) · tone: utilitarian · theme: custom warm-dark · anchor hue: 70
+   * paper oklch(15.5% 0.006 70) · accent oklch(80% 0.14 75) amber · fonts: system UI + system mono (project is zero-dependency)
+   * pre-emit critique: P4 H4 E4 S4 R5 V4 */
+  :root {
+    --color-well:       oklch(12.5% 0.005 70);
+    --color-paper:      oklch(15.5% 0.006 70);
+    --color-paper-2:    oklch(19% 0.007 70);
+    --color-paper-3:    oklch(23% 0.008 70);
+    --color-paper-4:    oklch(28% 0.009 70);
+    --color-rule:       oklch(26% 0.008 70);
+    --color-rule-2:     oklch(35% 0.009 70);
+    --color-neutral:    oklch(64% 0.009 70);
+    --color-muted:      oklch(77% 0.008 70);
+    --color-ink:        oklch(94% 0.006 80);
+    --color-accent:     oklch(80% 0.14 75);
+    --color-accent-ink: oklch(22% 0.03 75);
+    --color-ok:         oklch(79% 0.12 155);
+    --color-danger:     oklch(64% 0.19 25);
+    --color-danger-ink: oklch(97% 0.012 25);
+    --color-scrim:      oklch(10% 0.005 70 / 0.72);
+    --color-on-slide:   oklch(98% 0.004 80);
+    --color-slide-veil: oklch(12% 0.005 70 / 0.5);
+
+    --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+
+    --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+    --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 72px;
+
+    --text-xs: 12px; --text-sm: 13px; --text-md: 14px; --text-lg: 16px; --text-xl: 20px;
+
+    --radius-s: 6px; --radius-m: 8px; --radius-l: 12px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --dur: 140ms;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
 
-  * { scrollbar-width: thin; scrollbar-color: #333342 transparent; }
+  * { scrollbar-width: thin; scrollbar-color: var(--color-paper-4) transparent; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb {
-    background: #333342; border-radius: 6px;
+    background: var(--color-paper-4); border-radius: 6px;
     border: 2px solid transparent; background-clip: padding-box;
   }
-  ::-webkit-scrollbar-thumb:hover { background: #4a4a60; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-rule-2); background-clip: padding-box; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-corner { background: transparent; }
   body {
-    font-family: system-ui, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
-    background: #101014;
-    color: #f5f5f5;
+    font-family: var(--font-body);
+    background: var(--color-paper);
+    color: var(--color-ink);
     overflow: hidden;
   }
   body.dragover::after {
     content: "放開以載入簡報";
     position: fixed; inset: 12px;
     display: flex; align-items: center; justify-content: center;
-    border: 3px dashed #6c9ef8; border-radius: 16px;
-    background: rgba(16, 16, 20, 0.85);
-    font-size: 28px; color: #6c9ef8;
+    border: 2px dashed var(--color-accent); border-radius: var(--radius-l);
+    background: var(--color-scrim);
+    font-size: 24px; color: var(--color-accent);
     z-index: 20; pointer-events: none;
   }
 
-  #landing {
-    height: 100%;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 22px; text-align: center; padding: 24px;
+  /* --- 共用元件：圖示、按鈕、鍵帽 --- */
+  .ic {
+    width: 16px; height: 16px; flex: none; display: block;
+    fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
   }
-  #landing h1 { font-size: 56px; letter-spacing: 2px; }
-  #landing .hint { font-size: 17px; color: #b9b9c4; line-height: 1.8; }
-  #landing .buttons { display: flex; gap: 14px; }
-  #landing button {
-    font: inherit; font-size: 16px; color: #f5f5f5;
-    background: #23232e; border: 1px solid #3a3a4a; border-radius: 10px;
-    padding: 12px 26px; cursor: pointer;
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+    height: 34px; padding: 0 var(--space-3);
+    font: inherit; font-size: var(--text-md); white-space: nowrap;
+    color: var(--color-ink); background: var(--color-paper-3);
+    border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
+    cursor: pointer;
+    transition: background-color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
   }
-  #landing button:hover { background: #2e2e3c; }
-  #landing .keys { font-size: 13px; color: #77777f; }
-  #landing kbd {
-    background: #23232e; border: 1px solid #3a3a4a; border-radius: 4px;
-    padding: 1px 6px; font-family: inherit;
+  .btn:hover { background: var(--color-paper-4); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--color-muted); }
+  .btn-ghost:hover { background: var(--color-paper-3); color: var(--color-ink); }
+  .btn-primary { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-paper); font-weight: 600; }
+  .btn-primary:hover { background: var(--color-muted); border-color: var(--color-muted); }
+  .btn-icon { width: 34px; padding: 0; }
+  .btn.active { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+  :is(button, a, input, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-accent); outline-offset: 2px;
+  }
+  kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 20px; padding: 0 5px;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--color-muted);
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: 4px;
+    vertical-align: middle;
+  }
+  kbd .ic { width: 12px; height: 12px; }
+
+  /* --- 首頁 --- */
+  #landing { height: 100%; overflow-y: auto; }
+  .land {
+    max-width: 1040px; margin: 0 auto;
+    padding: clamp(40px, 11vh, 120px) var(--space-6) var(--space-7);
+  }
+  .land-head { margin-bottom: var(--space-7); }
+  #landing h1 { font-size: 44px; font-weight: 650; letter-spacing: -0.03em; line-height: 1.1; }
+  #landing .hint {
+    margin-top: var(--space-3); max-width: 46ch;
+    font-size: var(--text-lg); color: var(--color-muted); line-height: 1.75;
+  }
+  #landing .hint strong { color: var(--color-ink); font-weight: 600; }
+  .land-grid {
+    display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+    gap: var(--space-8); align-items: start;
+  }
+  .land-grid.solo { grid-template-columns: minmax(0, 300px); }
+  .land-actions { display: flex; flex-direction: column; gap: var(--space-4); }
+  #new-deck { height: 44px; font-size: var(--text-lg); justify-content: flex-start; padding: 0 var(--space-4); }
+  .act-list { display: flex; flex-direction: column; border-top: 1px solid var(--color-rule); }
+  .act {
+    display: flex; align-items: center; gap: var(--space-3);
+    height: 44px; padding: 0 var(--space-2);
+    font: inherit; font-size: var(--text-md); text-align: left;
+    color: var(--color-muted); background: none;
+    border: 0; border-bottom: 1px solid var(--color-rule);
+    cursor: pointer;
+    transition: color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+  }
+  .act:hover { color: var(--color-ink); background: var(--color-paper-2); }
+  .act small { margin-left: auto; font-size: var(--text-xs); color: var(--color-neutral); white-space: nowrap; }
+  .land-decks h2 {
+    display: flex; align-items: baseline; gap: var(--space-2);
+    font-size: var(--text-md); font-weight: 600; color: var(--color-ink);
+    padding-bottom: var(--space-3); border-bottom: 1px solid var(--color-rule);
+  }
+  .land-decks h2 span { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 400; color: var(--color-neutral); }
+  #deck-list { list-style: none; }
+  .deck-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--color-rule); }
+  .deck-open {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: var(--space-3);
+    height: 44px; padding: 0 var(--space-2);
+    font: inherit; font-size: var(--text-md); text-align: left;
+    color: var(--color-ink); background: none; border: 0; cursor: pointer;
+    transition: background-color var(--dur) var(--ease-out);
+  }
+  .deck-open:hover { background: var(--color-paper-2); }
+  .deck-open .ic { color: var(--color-neutral); }
+  .deck-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .deck-time { font-size: var(--text-xs); color: var(--color-neutral); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .deck-play {
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; color: var(--color-neutral);
+    transition: color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+  }
+  .deck-play:hover { color: var(--color-ink); background: var(--color-paper-2); }
+  #deck-empty { padding: var(--space-4) var(--space-2); font-size: var(--text-md); color: var(--color-neutral); line-height: 1.7; }
+  #landing .keys {
+    margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--color-rule);
+    display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5);
+    font-size: var(--text-sm); color: var(--color-neutral);
+  }
+  #landing .keys span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  @media (max-width: 760px) {
+    .land { padding-left: var(--space-4); padding-right: var(--space-4); }
+    .land-grid, .land-grid.solo { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+    #landing h1 { font-size: 34px; }
   }
 
+  /* --- 投影片本體（播放 / 預覽 / 講者台共用，尺寸一律 vw） --- */
   #stage {
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
@@ -129,10 +252,10 @@
   .countdown.paused { opacity: 0.45; }
   #stage .countdown { cursor: pointer; }
   @keyframes cd-blink { 50% { opacity: 0.25; } }
-  .block-selected { outline: 2px solid #6c9ef8; outline-offset: -2px; }
+  .block-selected { outline: 2px solid var(--color-accent); outline-offset: -2px; }
   #guide-v, #guide-h { position: absolute; pointer-events: none; z-index: 4; }
-  #guide-v { top: 0; bottom: 0; width: 0; border-left: 0.15vw dashed #e94560; }
-  #guide-h { left: 0; right: 0; height: 0; border-top: 0.15vw dashed #e94560; }
+  #guide-v { top: 0; bottom: 0; width: 0; border-left: 0.15vw dashed var(--color-danger); }
+  #guide-h { left: 0; right: 0; height: 0; border-top: 0.15vw dashed var(--color-danger); }
   .img-abs { position: absolute; margin: 0; }
   .img-abs img {
     width: 100%; height: auto; max-width: none; max-height: none;
@@ -145,114 +268,148 @@
   #ed-frame .slide-scope > *, #ed-frame #ed-overlay > * { cursor: move; user-select: none; }
   #ed-frame :is(h1, h2, h3, p, ul, ol, figure):not(.txt-abs):not(.img-abs) { position: relative; }
   #ed-frame :is(h1, h2, h3, p, ul, ol, figure):hover {
-    outline: 1px dashed rgba(108, 158, 248, 0.55); outline-offset: -1px;
+    outline: 1px dashed var(--color-accent); outline-offset: -1px;
   }
-  #ed-overlay > *:hover { outline: 2px dashed rgba(108, 158, 248, 0.7); outline-offset: -2px; }
+  #ed-overlay > *:hover { outline: 2px dashed var(--color-accent); outline-offset: -2px; }
   .img-handle {
     position: absolute; right: 0.15vw; bottom: 0.15vw;
     width: 1.6vw; height: 1.6vw;
-    background: #6c9ef8; border-radius: 0.3vw;
+    background: var(--color-accent); border-radius: 0.3vw;
     cursor: nwse-resize; opacity: 0; z-index: 3;
   }
   #ed-frame *:hover > .img-handle, .block-selected > .img-handle { opacity: 1; }
 
+  /* --- 編輯器 --- */
   #editor {
     position: fixed; inset: 0;
     display: flex; flex-direction: column;
-    background: #0b0b0f;
+    background: var(--color-paper);
   }
   #editor-bar {
-    display: flex; gap: 10px; align-items: center;
-    padding: 10px 14px;
-    background: #16161d; border-bottom: 1px solid #26262f;
+    display: flex; align-items: center; gap: var(--space-1);
+    height: 52px; padding: 0 var(--space-3);
+    background: var(--color-paper-2); border-bottom: 1px solid var(--color-rule);
   }
-  #editor-bar button {
-    font: inherit; font-size: 14px; color: #f5f5f5;
-    background: #23232e; border: 1px solid #3a3a4a; border-radius: 8px;
-    padding: 7px 18px; cursor: pointer;
+  .bar-sep { width: 1px; height: 20px; margin: 0 var(--space-2); background: var(--color-rule-2); flex: none; }
+  .bar-fill { flex: 1; min-width: var(--space-3); }
+  #ed-play { margin-right: var(--space-1); }
+  #ed-status {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: var(--text-sm); color: var(--color-neutral); text-align: right;
   }
-  #editor-bar button:hover { background: #2e2e3c; }
-  #ed-status { font-size: 13px; color: #77777f; margin-left: auto; }
+  #ed-status.ok { color: var(--color-ok); }
+  /* 檔案狀態：這份簡報存在哪、現在存了沒 */
+  #ed-file {
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    height: 34px; padding: 0 var(--space-3); margin: 0 var(--space-2); flex: none; max-width: 46vw;
+    font-size: var(--text-sm); color: var(--color-muted);
+    background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-m);
+  }
+  #ed-file .ic { width: 14px; height: 14px; display: none; }
+  #ed-file-name {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink);
+  }
+  #ed-file-state { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #ed-file[data-state="saved"] .i-saved,
+  #ed-file[data-state="dirty"] .i-dirty,
+  #ed-file[data-state="new"] .i-dirty,
+  #ed-file[data-state="saving"] .i-saving,
+  #ed-file[data-state="failed"] .i-failed { display: block; }
+  #ed-file[data-state="saved"] :is(.ic, #ed-file-state) { color: var(--color-ok); }
+  #ed-file[data-state="dirty"], #ed-file[data-state="new"] { border-color: var(--color-accent); }
+  #ed-file[data-state="dirty"] :is(.ic, #ed-file-state),
+  #ed-file[data-state="new"] :is(.ic, #ed-file-state) { color: var(--color-accent); }
+  #ed-file[data-state="failed"] { border-color: var(--color-danger); }
+  #ed-file[data-state="failed"] :is(.ic, #ed-file-state) { color: var(--color-danger); }
+  #ed-file[data-state="saving"] .i-saving { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #ed-file[data-state="saving"] .i-saving { animation: none; }
+    .btn, .act, .deck-open, .deck-play { transition: none; }
+  }
+  @media (max-width: 1180px) {
+    #editor-bar .btn-ghost .lbl { display: none; }
+    #editor-bar .btn-ghost { width: 34px; padding: 0; }
+    #ed-status { display: none; }
+  }
+
   #editor-body { flex: 1; display: flex; min-height: 0; position: relative; }
   #ed-text {
     flex: 1; resize: none; border: 0; outline: none;
-    background: #0b0b0f; color: #e8e8ee;
-    font: 15px/1.7 Consolas, "Cascadia Mono", monospace;
-    padding: 18px 20px;
+    background: var(--color-paper); color: var(--color-ink);
+    font: 15px/1.7 var(--font-mono);
+    padding: 20px 24px;
   }
+  #ed-text::placeholder { color: var(--color-neutral); }
   #ed-preview {
     position: relative;
     width: 46%; min-width: 320px;
-    border-left: 1px solid #26262f;
+    border-left: 1px solid var(--color-rule);
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 10px;
-    background: #101014; overflow: hidden; padding: 16px;
+    background: var(--color-well); overflow: hidden; padding: 16px;
   }
   .mini-tools {
     position: absolute; display: flex; gap: 6px; align-items: center; z-index: 6;
-    background: #16161d; border: 1px solid #26262f; border-radius: 8px;
-    padding: 6px 10px;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
+    padding: 5px 6px;
   }
+  .mini-tools .btn { height: 26px; padding: 0 var(--space-2); font-size: var(--text-sm); border-radius: var(--radius-s); }
+  .mini-tools .btn-icon { width: 28px; padding: 0; }
   #find-bar {
     position: absolute; top: 10px; left: 10px; z-index: 10;
     display: flex; align-items: center; gap: 6px;
-    background: #16161d; border: 1px solid #26262f; border-radius: 8px;
-    padding: 6px 8px;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
+    padding: 6px;
   }
-  #find-bar input {
-    font: inherit; font-size: 13.5px; color: #e8e8ee;
-    background: #0e0e12; border: 1px solid #2a2a35; border-radius: 6px;
-    padding: 5px 8px; width: 140px;
+  #find-bar input, .field {
+    font: inherit; font-size: var(--text-md); color: var(--color-ink);
+    background: var(--color-well); border: 1px solid var(--color-rule-2); border-radius: var(--radius-s);
+    padding: 0 var(--space-2); height: 30px;
   }
-  #find-bar button {
-    font: inherit; font-size: 13px; color: #f5f5f5;
-    background: #23232e; border: 1px solid #3a3a4a; border-radius: 6px;
-    padding: 5px 9px; cursor: pointer;
-  }
-  #find-bar button:hover { background: #2e2e3c; }
-  #find-count { font-size: 12.5px; color: #9aa0a6; min-width: 42px; text-align: center; }
+  #find-bar input { width: 140px; font-size: var(--text-sm); }
+  #find-bar input::placeholder, .field::placeholder { color: var(--color-neutral); }
+  #find-bar .btn { height: 30px; font-size: var(--text-sm); border-radius: var(--radius-s); }
+  #find-bar .btn-icon { width: 30px; }
+  #find-count { font-size: var(--text-xs); color: var(--color-neutral); min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
   #ed-tools { top: 8px; left: 50%; transform: translateX(-50%); }
   #txt-tools { top: 8px; left: 14px; }
-  .mini-tools button {
-    font: inherit; font-size: 13px; color: #f5f5f5;
-    background: #23232e; border: 1px solid #3a3a4a; border-radius: 6px;
-    padding: 3px 10px; cursor: pointer;
-  }
-  .mini-tools button:hover { background: #2e2e3c; }
   .mini-tools .swatch {
     width: 18px; height: 18px; border-radius: 4px; cursor: pointer;
-    border: 1px solid #3a3a4a;
+    border: 1px solid var(--color-rule-2);
   }
   .mini-tools input[type="color"] {
     width: 26px; height: 22px; border: 0; background: none; cursor: pointer; padding: 0;
   }
   #ed-viewport {
     position: relative;
-    overflow: hidden; border-radius: 6px;
-    box-shadow: 0 0 0 1px #26262f;
+    overflow: hidden; border-radius: var(--radius-s);
+    box-shadow: 0 0 0 1px var(--color-rule-2);
   }
   /* 預覽右下角：全螢幕播放鈕（從目前這頁開始） */
   #ed-fs {
     position: absolute; right: 10px; bottom: 10px; z-index: 7;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, 0.4); border: 0; border-radius: 8px;
-    color: #fff; opacity: 0.3; cursor: pointer; padding: 7px;
+    background: var(--color-slide-veil); border: 0; border-radius: var(--radius-m);
+    color: var(--color-on-slide); opacity: 0.4; cursor: pointer; padding: 7px;
   }
   #ed-viewport:hover #ed-fs { opacity: 0.75; }
   #ed-fs:hover { opacity: 1 !important; }
-  #ed-fs svg { width: 18px; height: 18px; display: block; }
+  #ed-fs .ic { width: 18px; height: 18px; }
   #ed-frame {
     width: 100vw; height: 56.25vw;
     transform-origin: top left;
     display: flex; align-items: center; justify-content: center;
   }
-  #ed-pageinfo { font-size: 15px; color: #f5f5f5; }
-  #ed-shortcuts { font-size: 12.5px; color: #77777f; }
+  #ed-pageinfo { font-size: var(--text-md); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+  #ed-shortcuts { font-size: var(--text-xs); color: var(--color-neutral); }
   #ed-strip { display: flex; gap: 8px; justify-content: center; }
 
+  /* --- 播放 --- */
   #indicator {
     position: fixed; right: 2vw; bottom: 2.5vh;
-    font-size: 1.4vw; opacity: 0.55;
+    font-size: 1.4vw; opacity: 0.55; font-variant-numeric: tabular-nums;
   }
 
   #ink {
@@ -264,31 +421,32 @@
   }
   .st-thumb {
     position: relative; overflow: hidden; cursor: pointer;
-    border-radius: 5px; box-shadow: 0 0 0 1px #2e2e3c; flex: 0 0 auto;
+    border-radius: 5px; box-shadow: 0 0 0 1px var(--color-rule-2); flex: 0 0 auto;
   }
-  .st-thumb:hover { box-shadow: 0 0 0 2px #9aa0a6; }
-  .st-thumb.current { box-shadow: 0 0 0 2px #6c9ef8; }
+  .st-thumb:hover { box-shadow: 0 0 0 2px var(--color-muted); }
+  .st-thumb.current { box-shadow: 0 0 0 2px var(--color-accent); }
   .st-thumb .pr-frame { transform-origin: top left; }
   .st-num {
     position: absolute; bottom: 3px; right: 5px;
-    font-size: 11px; color: #fff; background: rgba(0, 0, 0, 0.55);
-    padding: 0 5px; border-radius: 3px; z-index: 2;
+    font-size: 11px; color: var(--color-on-slide); background: var(--color-slide-veil);
+    padding: 0 5px; border-radius: 3px; z-index: 2; font-variant-numeric: tabular-nums;
   }
   #stage.draw-mode #ink { pointer-events: auto; cursor: crosshair; }
   #notes-panel {
     position: fixed; left: 2vw; bottom: 2.5vh; max-width: 42vw;
-    background: rgba(0, 0, 0, 0.6); color: #fff;
-    padding: 12px 16px; border-radius: 10px;
+    background: var(--color-scrim); color: var(--color-on-slide);
+    padding: 12px 16px; border-radius: var(--radius-l);
     font-size: 16px; line-height: 1.7; white-space: pre-wrap;
     z-index: 6;
   }
   #exit-play {
     position: fixed; top: 1.5vh; right: 1.2vw;
-    font-size: 1.6vw; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
     background: none; border: 0; color: inherit;
-    opacity: 0.2; cursor: pointer; padding: 0.5vw;
+    opacity: 0.25; cursor: pointer; padding: 0.5vw;
   }
   #exit-play:hover { opacity: 0.9; }
+  #exit-play .ic { width: 1.6vw; height: 1.6vw; min-width: 20px; min-height: 20px; }
 
   /* 全螢幕鈕：貼在投影片本體的右下角（像影片播放器），letterbox 邊界用 16:9 幾何算 */
   #fs-toggle {
@@ -296,19 +454,20 @@
     right: calc((100vw - min(100vw, 177.78vh)) / 2 + 0.9vw);
     bottom: calc((100vh - min(56.25vw, 100vh)) / 2 + 0.9vw);
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, 0.35); border: 0; border-radius: 10px;
-    color: #fff; opacity: 0.25; cursor: pointer; padding: 0.55vw;
+    background: var(--color-slide-veil); border: 0; border-radius: 10px;
+    color: var(--color-on-slide); opacity: 0.3; cursor: pointer; padding: 0.55vw;
   }
   #fs-toggle:hover { opacity: 0.95; }
-  #fs-toggle svg { width: 1.6vw; height: 1.6vw; min-width: 20px; min-height: 20px; display: block; }
+  #fs-toggle .ic { width: 1.6vw; height: 1.6vw; min-width: 20px; min-height: 20px; }
   #fs-toggle .icon-exit { display: none; }
   #fs-toggle.is-fs .icon-enter { display: none; }
   #fs-toggle.is-fs .icon-exit { display: block; }
 
+  /* --- 講者台 --- */
   #presenter {
     position: fixed; inset: 0; z-index: 8;
-    display: flex; background: #0b0b0f; color: #e8e8ee;
-    padding: 18px; gap: 18px;
+    display: flex; background: var(--color-paper); color: var(--color-ink);
+    padding: 20px; gap: 24px;
   }
   #pr-left {
     flex: 0 0 56%; display: flex; flex-direction: column;
@@ -317,12 +476,12 @@
   #pr-strip { display: flex; gap: 12px; }
   .pr-thumb { display: flex; flex-direction: column; gap: 4px; }
   .pr-thumb .pr-viewport { cursor: pointer; }
-  .pr-thumb .pr-viewport:hover { box-shadow: 0 0 0 2px #6c9ef8; }
-  #pr-slider { width: 100%; accent-color: #6c9ef8; margin-top: 6px; cursor: pointer; }
-  .pr-label { font-size: 15px; font-weight: 600; color: #d5d5de; }
+  .pr-thumb .pr-viewport:hover { box-shadow: 0 0 0 2px var(--color-accent); }
+  #pr-slider { width: 100%; accent-color: var(--color-accent); margin-top: 6px; cursor: pointer; }
+  .pr-label { font-size: var(--text-sm); font-weight: 600; color: var(--color-neutral); }
   .pr-viewport {
-    overflow: hidden; border-radius: 6px;
-    box-shadow: 0 0 0 1px #26262f; align-self: flex-start;
+    overflow: hidden; border-radius: var(--radius-s);
+    box-shadow: 0 0 0 1px var(--color-rule-2); align-self: flex-start;
   }
   .pr-frame {
     width: 100vw; height: 56.25vw;
@@ -338,96 +497,162 @@
   #pr-topline {
     display: flex; align-items: baseline; gap: 18px;
   }
-  #pr-timer { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  #pr-page { font-size: 18px; color: #9aa0a6; }
+  #pr-timer { font-family: var(--font-mono); font-size: 36px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  #pr-page { font-size: 18px; color: var(--color-neutral); font-variant-numeric: tabular-nums; }
   #pr-notes {
     flex: 1; overflow-y: auto;
-    background: #131318; border: 1px solid #26262f; border-radius: 10px;
-    padding: 14px 16px; font-size: 14.5px; line-height: 1.65; white-space: pre-wrap;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule); border-radius: var(--radius-l);
+    padding: 16px 18px; font-size: 15px; line-height: 1.7; white-space: pre-wrap;
   }
   #pr-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-  #pr-buttons button {
-    font: inherit; font-size: 16px; color: #f5f5f5;
-    background: #23232e; border: 1px solid #3a3a4a; border-radius: 8px;
-    padding: 12px 18px; cursor: pointer;
-  }
-  #pr-buttons button:hover { background: #2e2e3c; }
-  #pr-buttons button.active { background: #6c9ef8; color: #0b0b0f; }
-  .keys-hint { font-size: 12.5px; color: #77777f; }
+  #pr-buttons .btn { height: 44px; padding: 0 var(--space-4); font-size: var(--text-lg); }
+  #pr-buttons kbd { margin-left: 2px; }
+  .keys-hint { font-size: var(--text-xs); color: var(--color-neutral); }
 
   #stage-wait {
     position: fixed; inset: 0; z-index: 7;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: #000; color: #9aa0a6; font-size: 24px; text-align: center; line-height: 2;
+    background: var(--color-well); color: var(--color-muted); font-size: 22px; text-align: center; line-height: 2;
   }
+  #stage-wait small { font-size: 15px; color: var(--color-neutral); }
 
+  /* --- 提示與對話框 --- */
   #toast {
     position: fixed; top: 4vh; left: 50%; transform: translateX(-50%);
-    background: #c0392b; color: #fff;
-    padding: 10px 22px; border-radius: 8px; font-size: 15px; z-index: 30;
+    display: flex; align-items: center; gap: var(--space-2);
+    background: var(--color-danger); color: var(--color-danger-ink);
+    padding: 10px 18px; border-radius: var(--radius-m); font-size: var(--text-md); z-index: 30;
   }
-  #gen-modal {
+  .modal {
     position: fixed; inset: 0; z-index: 20;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--color-scrim);
   }
-  #gen-card {
+  .card {
     width: min(640px, 90vw); max-height: 80vh;
-    display: flex; flex-direction: column; gap: 12px;
-    background: #16161c; border: 1px solid #2a2a35; border-radius: 12px;
-    padding: 20px 22px;
+    display: flex; flex-direction: column; gap: var(--space-3);
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-l);
+    padding: var(--space-5);
   }
-  #gen-card h2 { margin: 0; font-size: 18px; }
+  .card.narrow { width: min(440px, 90vw); }
+  .card h2 { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.01em; }
+  .card-note { font-size: var(--text-sm); color: var(--color-neutral); line-height: 1.6; }
+  .card-note code { font-family: var(--font-mono); color: var(--color-muted); }
   #gen-text {
     flex: 1; min-height: 240px; resize: vertical;
-    background: #0e0e12; color: #f5f5f5; border: 1px solid #2a2a35; border-radius: 8px;
-    padding: 12px; font: inherit; font-size: 14px; line-height: 1.6;
+    background: var(--color-well); color: var(--color-ink);
+    border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
+    padding: var(--space-3); font: inherit; font-size: var(--text-md); line-height: 1.6;
   }
-  #gen-error { color: #e97070; font-size: 13.5px; min-height: 1.4em; }
-  #gen-actions { display: flex; justify-content: flex-end; gap: 10px; }
-  #gen-actions button {
-    font: inherit; font-size: 14.5px; color: #f5f5f5;
-    background: #23232e; border: 1px solid #3a3a4a; border-radius: 8px;
-    padding: 10px 18px; cursor: pointer;
-  }
-  #gen-actions button:hover { background: #2e2e3c; }
-  #gen-actions button:disabled { opacity: 0.55; cursor: default; }
-  #gen-submit { background: #6c9ef8; color: #0b0b0f; border-color: #6c9ef8; }
+  #name-row { display: flex; align-items: center; gap: var(--space-2); }
+  #name-row .field { flex: 1; min-width: 0; height: 38px; font-family: var(--font-mono); }
+  #name-row span { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-neutral); }
+  .card-error { color: var(--color-danger); font-size: var(--text-sm); min-height: 1.4em; }
+  .card-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+  .card-actions .btn { height: 38px; padding: 0 var(--space-4); }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-text-down" viewBox="0 0 24 24"><path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 7v9"/><path d="m14 12 4 4 4-4"/></symbol>
+  <symbol id="i-text-up" viewBox="0 0 24 24"><path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 16V7"/><path d="m14 11 4-4 4 4"/></symbol>
+  <symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-fs-enter" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-fs-exit" viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></symbol>
+</svg>
+
 <main id="landing">
-  <h1>SimPPT</h1>
-  <p class="hint">
-    「開啟檔案／資料夾」會進<strong>編輯器</strong>（左寫右預覽）；<br>
-    拖入 .md 或資料夾則<strong>直接播放</strong>。
-  </p>
-  <div class="buttons">
-    <button id="new-deck">新簡報</button>
-    <button id="open-sample">看範例</button>
-    <button id="open-file">開啟檔案</button>
-    <button id="open-dir">開啟資料夾</button>
-    <button id="open-history" title="編輯內容每分鐘自動備份，最多 20 份；點一次載入最新，再點往回翻">歷史備份</button>
-    <button id="ai-generate" title="貼上內容，用本機 claude CLI 生成一份簡報">AI 生成</button>
+  <div class="land">
+    <header class="land-head">
+      <h1>SimPPT</h1>
+      <p class="hint">
+        「開啟檔案／資料夾」會進<strong>編輯器</strong>（左寫右預覽）；<br>
+        拖入 .md 或資料夾則<strong>直接播放</strong>。
+      </p>
+    </header>
+    <div class="land-grid solo" id="land-grid">
+      <section class="land-actions">
+        <button id="new-deck" class="btn btn-primary"><svg class="ic"><use href="#i-file-plus"/></svg>新簡報</button>
+        <div class="act-list">
+          <button id="open-file" class="act"><svg class="ic"><use href="#i-file"/></svg>開啟檔案<small>.md</small></button>
+          <button id="open-dir" class="act"><svg class="ic"><use href="#i-folder"/></svg>開啟資料夾<small>含圖片</small></button>
+          <button id="open-history" class="act" title="編輯內容每分鐘自動備份，最多 20 份；點一次載入最新，再點往回翻"><svg class="ic"><use href="#i-history"/></svg>歷史備份<small>最多 20 份</small></button>
+          <button id="open-sample" class="act"><svg class="ic"><use href="#i-eye"/></svg>看範例</button>
+          <button id="ai-generate" class="act" title="貼上內容，用本機 claude CLI 生成一份簡報"><svg class="ic"><use href="#i-message"/></svg>AI 生成<small>本機 claude</small></button>
+        </div>
+      </section>
+      <section class="land-decks" id="land-decks" hidden>
+        <h2>存在這台的簡報 <span>decks/</span></h2>
+        <ul id="deck-list"></ul>
+        <p id="deck-empty" hidden>還沒有。按「新簡報」寫一份，第一次存檔時取個名字，就會出現在這裡。</p>
+      </section>
+    </div>
+    <p class="keys">
+      <span><kbd><svg class="ic"><use href="#i-arrow-left"/></svg></kbd><kbd><svg class="ic"><use href="#i-arrow-right"/></svg></kbd>翻頁</span>
+      <span><kbd>F</kbd>全螢幕</span>
+      <span><kbd>Esc</kbd>結束播放</span>
+      <span><kbd>P</kbd>頁碼</span>
+      <span><kbd>E</kbd>編輯</span>
+      <span><kbd>Ctrl</kbd><kbd>S</kbd>存檔</span>
+    </p>
   </div>
-  <p class="keys">
-    <kbd>←</kbd> <kbd>→</kbd> 翻頁 · <kbd>F</kbd> 全螢幕 · <kbd>Esc</kbd> 結束播放 ·
-    <kbd>P</kbd> 頁碼 · <kbd>E</kbd> 編輯（<kbd>Ctrl+S</kbd> 存檔）
-  </p>
 </main>
 
-<div id="gen-modal" hidden>
-  <div id="gen-card">
+<div id="gen-modal" class="modal" hidden>
+  <div id="gen-card" class="card">
     <h2 id="gen-title">AI 生成簡報</h2>
     <textarea id="gen-text" placeholder="貼上你想做成簡報的內容…"></textarea>
-    <div id="gen-error"></div>
-    <div id="gen-actions">
-      <button id="gen-cancel">取消</button>
-      <button id="gen-submit">生成</button>
+    <div id="gen-error" class="card-error"></div>
+    <div id="gen-actions" class="card-actions">
+      <button id="gen-cancel" class="btn btn-ghost">取消</button>
+      <button id="gen-submit" class="btn btn-primary">生成</button>
     </div>
   </div>
+</div>
+
+<div id="name-modal" class="modal" hidden>
+  <form id="name-card" class="card narrow">
+    <h2>存成新檔</h2>
+    <p class="card-note">這份簡報還沒有檔案。取個名字，之後按 <kbd>Ctrl</kbd> <kbd>S</kbd> 都會存回同一個檔。</p>
+    <div id="name-row">
+      <span>decks/</span>
+      <input id="name-input" class="field" type="text" autocomplete="off" spellcheck="false" aria-label="檔名">
+      <span>.md</span>
+    </div>
+    <div id="name-error" class="card-error"></div>
+    <div class="card-actions">
+      <button type="button" id="name-cancel" class="btn btn-ghost">取消</button>
+      <button type="submit" id="name-submit" class="btn btn-primary">存檔</button>
+    </div>
+  </form>
 </div>
 
 <section id="stage" hidden>
@@ -439,38 +664,48 @@
   <div id="stage-strip" hidden></div>
   <div id="notes-panel" hidden></div>
   <div id="indicator" hidden></div>
-  <button id="exit-play" title="回編輯（Esc）">✕</button>
-  <button id="fs-toggle" title="全螢幕（F）">
-    <svg class="icon-enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-    <svg class="icon-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+  <button id="exit-play" title="回編輯（Esc）" aria-label="回編輯"><svg class="ic"><use href="#i-x"/></svg></button>
+  <button id="fs-toggle" title="全螢幕（F）" aria-label="全螢幕">
+    <svg class="ic icon-enter"><use href="#i-fs-enter"/></svg>
+    <svg class="ic icon-exit"><use href="#i-fs-exit"/></svg>
   </button>
 </section>
 
 <section id="editor" hidden>
   <div id="editor-bar">
-    <button id="ed-play">▶ 播放</button>
-    <button id="ed-present" title="開觀眾視窗（拿去錄影），這個視窗變講者台">🎤 講者</button>
-    <button id="ed-save">儲存 .md</button>
-    <button id="ed-reset" title="清掉此頁所有拖曳改動，回到 markdown 預設排版">還原版面</button>
-    <button id="ed-ai-revise" title="跟 AI 說要怎麼調整這份簡報">AI 編輯</button>
-    <button id="ed-find" title="搜尋並取代（Ctrl+H）">🔍 取代</button>
-    <button id="ed-home">首頁</button>
-    <span id="ed-status">Ctrl+S 儲存 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁 · 播放中 Esc 回編輯</span>
+    <button id="ed-play" class="btn btn-primary" title="播放（Ctrl+Enter）"><svg class="ic"><use href="#i-play"/></svg>播放</button>
+    <button id="ed-present" class="btn btn-ghost" title="開觀眾視窗（拿去錄影），這個視窗變講者台"><svg class="ic"><use href="#i-mic"/></svg><span class="lbl">講者</span></button>
+    <span class="bar-sep"></span>
+    <button id="ed-save" class="btn btn-ghost" title="存檔（Ctrl+S）"><svg class="ic"><use href="#i-save"/></svg><span class="lbl">存檔</span></button>
+    <button id="ed-find" class="btn btn-ghost" title="搜尋並取代（Ctrl+H）"><svg class="ic"><use href="#i-search"/></svg><span class="lbl">取代</span></button>
+    <button id="ed-reset" class="btn btn-ghost" title="清掉此頁所有拖曳改動，回到 markdown 預設排版"><svg class="ic"><use href="#i-undo"/></svg><span class="lbl">還原版面</span></button>
+    <button id="ed-ai-revise" class="btn btn-ghost" title="跟 AI 說要怎麼調整這份簡報"><svg class="ic"><use href="#i-message"/></svg><span class="lbl">AI 編輯</span></button>
+    <span class="bar-fill"></span>
+    <span id="ed-status"></span>
+    <span id="ed-file" data-state="new" title="這份簡報存在哪、現在存了沒">
+      <svg class="ic i-saved"><use href="#i-check"/></svg>
+      <svg class="ic i-dirty"><use href="#i-dot"/></svg>
+      <svg class="ic i-saving"><use href="#i-loader"/></svg>
+      <svg class="ic i-failed"><use href="#i-alert"/></svg>
+      <span id="ed-file-name">未命名</span>
+      <span id="ed-file-state">尚未存檔</span>
+    </span>
+    <button id="ed-home" class="btn btn-ghost btn-icon" title="回首頁" aria-label="回首頁"><svg class="ic"><use href="#i-home"/></svg></button>
   </div>
   <div id="editor-body">
     <div id="find-bar" hidden>
       <input type="text" id="find-query" placeholder="搜尋…">
       <input type="text" id="find-replacement" placeholder="取代成…">
-      <button id="find-prev" title="上一個">↑</button>
-      <button id="find-next" title="下一個">↓</button>
-      <button id="find-replace-all">全部取代</button>
+      <button id="find-prev" class="btn btn-icon" title="上一個" aria-label="上一個"><svg class="ic"><use href="#i-up"/></svg></button>
+      <button id="find-next" class="btn btn-icon" title="下一個" aria-label="下一個"><svg class="ic"><use href="#i-down"/></svg></button>
+      <button id="find-replace-all" class="btn">全部取代</button>
       <span id="find-count">0/0</span>
-      <button id="find-close" title="關閉（Esc）">✕</button>
+      <button id="find-close" class="btn btn-ghost btn-icon" title="關閉（Esc）" aria-label="關閉"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
     <div id="txt-tools" class="mini-tools" hidden>
-      <button data-act="bold" title="加粗選取的字（**粗體**）"><strong>B</strong></button>
-      <button data-act="smaller" title="縮小選取的字">A−</button>
-      <button data-act="bigger" title="放大選取的字">A＋</button>
+      <button class="btn btn-icon" data-act="bold" title="加粗選取的字（**粗體**）"><strong>B</strong></button>
+      <button class="btn btn-icon" data-act="smaller" title="縮小選取的字" aria-label="縮小"><svg class="ic"><use href="#i-text-down"/></svg></button>
+      <button class="btn btn-icon" data-act="bigger" title="放大選取的字" aria-label="放大"><svg class="ic"><use href="#i-text-up"/></svg></button>
       <span class="swatch" data-c="#ffffff" style="background:#ffffff"></span>
       <span class="swatch" data-c="#1c1c1e" style="background:#1c1c1e"></span>
       <span class="swatch" data-c="#9aa0a6" style="background:#9aa0a6"></span>
@@ -478,14 +713,14 @@
       <span class="swatch" data-c="#f4b860" style="background:#f4b860"></span>
       <span class="swatch" data-c="#6c9ef8" style="background:#6c9ef8"></span>
       <input type="color" id="txt-color" title="自訂顏色">
-      <button data-act="clear" title="移除選取文字的樣式">清除</button>
+      <button class="btn" data-act="clear" title="移除選取文字的樣式">清除</button>
     </div>
     <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
     <div id="ed-preview">
       <div id="ed-tools" class="mini-tools" hidden>
-        <button data-act="bold" title="加粗整塊"><strong>B</strong></button>
-        <button data-act="smaller" title="縮小字級">A−</button>
-        <button data-act="bigger" title="放大字級">A＋</button>
+        <button class="btn btn-icon" data-act="bold" title="加粗整塊"><strong>B</strong></button>
+        <button class="btn btn-icon" data-act="smaller" title="縮小字級" aria-label="縮小"><svg class="ic"><use href="#i-text-down"/></svg></button>
+        <button class="btn btn-icon" data-act="bigger" title="放大字級" aria-label="放大"><svg class="ic"><use href="#i-text-up"/></svg></button>
         <span class="swatch" data-c="#ffffff" style="background:#ffffff"></span>
         <span class="swatch" data-c="#1c1c1e" style="background:#1c1c1e"></span>
         <span class="swatch" data-c="#9aa0a6" style="background:#9aa0a6"></span>
@@ -493,16 +728,16 @@
         <span class="swatch" data-c="#f4b860" style="background:#f4b860"></span>
         <span class="swatch" data-c="#6c9ef8" style="background:#6c9ef8"></span>
         <input type="color" id="tool-color" title="自訂顏色">
-        <button data-act="dist" title="把選取的區塊上下等距排列（Shift 點選多個）">等距</button>
-        <button data-act="clear" title="清掉選取區塊的樣式改動">清除</button>
+        <button class="btn" data-act="dist" title="把選取的區塊上下等距排列（Shift 點選多個）">等距</button>
+        <button class="btn" data-act="clear" title="清掉選取區塊的樣式改動">清除</button>
       </div>
       <div id="ed-viewport">
         <div id="ed-frame"><div id="ed-content" class="deck-slide slide-scope"></div><div id="ed-overlay" class="slide-scope"></div><div id="guide-v" hidden></div><div id="guide-h" hidden></div></div>
-        <button id="ed-fs" title="全螢幕播放（從這頁開始）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+        <button id="ed-fs" title="全螢幕播放（從這頁開始）" aria-label="全螢幕播放"><svg class="ic"><use href="#i-fs-enter"/></svg></button>
       </div>
       <div id="ed-strip"></div>
       <div id="ed-pageinfo"></div>
-      <div id="ed-shortcuts">Ctrl+S 儲存 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁</div>
+      <div id="ed-shortcuts">Ctrl+S 存檔 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁 · 播放中按 E 回編輯</div>
     </div>
   </div>
 </section>
@@ -524,19 +759,19 @@
     <div id="pr-topline"><span id="pr-timer">00:00</span><span id="pr-page"></span></div>
     <div id="pr-notes"></div>
     <div id="pr-buttons">
-      <button id="pr-prev">◀ 上一頁</button>
-      <button id="pr-next">下一頁 ▶</button>
-      <button id="pr-draw">畫筆 D</button>
-      <button id="pr-clearink">清筆跡 X</button>
-      <button id="pr-cd-toggle" title="暫停/繼續觀眾視窗的倒數">倒數 ⏯</button>
-      <button id="pr-cd-reset" title="重新倒數（R）">倒數 ↺</button>
-      <button id="pr-exit">結束 Esc</button>
+      <button id="pr-prev" class="btn"><svg class="ic"><use href="#i-left"/></svg>上一頁</button>
+      <button id="pr-next" class="btn">下一頁<svg class="ic"><use href="#i-right"/></svg></button>
+      <button id="pr-draw" class="btn"><svg class="ic"><use href="#i-pencil"/></svg>畫筆<kbd>D</kbd></button>
+      <button id="pr-clearink" class="btn"><svg class="ic"><use href="#i-eraser"/></svg>清筆跡<kbd>X</kbd></button>
+      <button id="pr-cd-toggle" class="btn" title="暫停/繼續觀眾視窗的倒數"><svg class="ic"><use href="#i-pause"/></svg>倒數</button>
+      <button id="pr-cd-reset" class="btn" title="重新倒數（R）"><svg class="ic"><use href="#i-rotate"/></svg>重新倒數<kbd>R</kbd></button>
+      <button id="pr-exit" class="btn"><svg class="ic"><use href="#i-x"/></svg>結束<kbd>Esc</kbd></button>
     </div>
-    <p class="keys-hint">←/→/空白鍵 翻頁（兩視窗同步）· 畫筆在觀眾視窗上動手畫</p>
+    <p class="keys-hint">方向鍵、空白鍵翻頁（兩視窗同步）· 畫筆在觀眾視窗上動手畫</p>
   </div>
 </section>
 
-<div id="stage-wait" hidden>等待講者視窗連線…<br><small>（回到另一個視窗按「🎤 講者」）</small></div>
+<div id="stage-wait" hidden>等待講者視窗連線…<br><small>回到另一個視窗按「講者」</small></div>
 
 <div id="toast" hidden></div>
 <input id="file-input" type="file" accept=".md,.markdown,.txt" hidden>
@@ -861,6 +1096,56 @@ const FindReplace = (() => {
 })()
 </script>
 
+<script id="save-logic">
+const SaveLogic = (() => {
+  'use strict'
+
+  const FALLBACK_NAME = '未命名'
+  const MAX_NAME = 40
+
+  // Characters Windows will not take in a file name, plus control characters.
+  const cleanName = (raw) => raw
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[.\s]+/, '')
+    .trim()
+
+  // A file name for a new deck, taken from its first heading.
+  const suggestName = (text) => {
+    const heading = /^#{1,3}\s+(.+)$/m.exec(text || '')
+    if (!heading) return FALLBACK_NAME
+    const plain = heading[1]
+      .replace(/\{\{([^|}]*)\|[^}]*\}\}/g, '$1')
+      .replace(/\{[^}]*\}\s*$/, '')
+      .replace(/[*_`]/g, '')
+    return cleanName(plain).slice(0, MAX_NAME).trim() || FALLBACK_NAME
+  }
+
+  // What the user typed as a name -> a path inside decks/, or null when nothing usable was typed.
+  const deckPathFor = (typed) => {
+    const last = String(typed || '').split(/[\\/]/).pop().trim()
+    const base = cleanName(last.replace(/\.(md|markdown)$/i, ''))
+    return base ? `decks/${base}.md` : null
+  }
+
+  // The one word that says where this deck stands. `hasTarget` = it has a file to be saved to.
+  const fileState = ({ saving = false, failed = false, dirty = false, hasTarget = false }) => {
+    if (saving) return 'saving'
+    if (failed) return 'failed'
+    if (!hasTarget) return 'new'
+    return dirty ? 'dirty' : 'saved'
+  }
+
+  // Same text, line endings aside? A textarea turns CRLF into LF, so a plain === would
+  // call a freshly opened Windows file "changed". Not a string on either side = not the same.
+  const sameText = (a, b) =>
+    typeof a === 'string' && typeof b === 'string'
+    && a.replace(/\r\n?/g, '\n') === b.replace(/\r\n?/g, '\n')
+
+  return { suggestName, deckPathFor, fileState, sameText }
+})()
+</script>
+
 <script>
 (() => {
   'use strict'
@@ -887,6 +1172,19 @@ const FindReplace = (() => {
   const edContent = document.getElementById('ed-content')
   const edPageInfo = document.getElementById('ed-pageinfo')
   const edStatus = document.getElementById('ed-status')
+  const edFile = document.getElementById('ed-file')
+  const edFileName = document.getElementById('ed-file-name')
+  const edFileState = document.getElementById('ed-file-state')
+  const nameModal = document.getElementById('name-modal')
+  const nameCard = document.getElementById('name-card')
+  const nameInput = document.getElementById('name-input')
+  const nameError = document.getElementById('name-error')
+  const nameCancelBtn = document.getElementById('name-cancel')
+  const nameSubmitBtn = document.getElementById('name-submit')
+  const landGrid = document.getElementById('land-grid')
+  const landDecks = document.getElementById('land-decks')
+  const deckList = document.getElementById('deck-list')
+  const deckEmpty = document.getElementById('deck-empty')
   const edPlayBtn = document.getElementById('ed-play')
   const edSaveBtn = document.getElementById('ed-save')
   const aiGenerateBtn = document.getElementById('ai-generate')
@@ -919,6 +1217,8 @@ const FindReplace = (() => {
     index: 0,
     mdPath: '',
     sourceText: '',
+    // 已知「檔案裡現在的內容」；null = 不知道或還沒有檔案。跟編輯器不一樣就是有未存的變更。
+    cleanText: null,
     deckBaseUrl: '',
     deckUrl: '',
     fileMap: new Map(),
@@ -1259,6 +1559,7 @@ const FindReplace = (() => {
     state.fileHandle = null
     state.dirHandle = null
     state.deckUrl = ''
+    state.deckBaseUrl = ''
   }
 
   const goTo = (index) => {
@@ -1288,6 +1589,7 @@ const FindReplace = (() => {
     }
     const text = await fileMap.get(mdPath).text()
     state.index = 0
+    state.cleanText = text
     loadDeck(text, mdPath, fileMap)
   }
 
@@ -1354,6 +1656,7 @@ const FindReplace = (() => {
         const text = await file.text()
         if (text === state.sourceText || edDirty) return
         appendHistory(state.sourceText, state.mdPath)
+        state.cleanText = text
         loadDeck(text, mdPath, fileMap)
       } else if (state.fileHandle) {
         const file = await state.fileHandle.getFile()
@@ -1362,6 +1665,7 @@ const FindReplace = (() => {
         const text = await file.text()
         if (text === state.sourceText || edDirty) return
         appendHistory(state.sourceText, state.mdPath)
+        state.cleanText = text
         loadDeck(text, file.name, new Map())
       }
     } catch {
@@ -1377,7 +1681,8 @@ const FindReplace = (() => {
   openSampleBtn.addEventListener('click', () => {
     stopPolling()
     state.index = 0
-    loadDeck(sampleDeck.textContent.trim(), 'sample.md', new Map())
+    state.cleanText = sampleDeck.textContent.trim()
+    loadDeck(state.cleanText, 'sample.md', new Map())
   })
 
   openFileBtn.addEventListener('click', async () => {
@@ -1396,6 +1701,7 @@ const FindReplace = (() => {
       state.mdPath = file.name
       state.fileMap = new Map()
       state.sourceText = await file.text()
+      state.cleanText = state.sourceText
       state.lastModified = file.lastModified
       state.index = 0
       enterEditor(state.sourceText)
@@ -1425,6 +1731,7 @@ const FindReplace = (() => {
       state.mdPath = mdPath
       state.fileMap = fileMap
       state.sourceText = await file.text()
+      state.cleanText = state.sourceText
       state.lastModified = file.lastModified
       state.index = 0
       enterEditor(state.sourceText)
@@ -1441,6 +1748,7 @@ const FindReplace = (() => {
     state.mdPath = file.name
     state.fileMap = new Map()
     state.sourceText = await file.text()
+    state.cleanText = state.sourceText
     state.index = 0
     enterEditor(state.sourceText)
     fileInput.value = ''
@@ -1464,10 +1772,38 @@ const FindReplace = (() => {
   ].join('\n')
 
   let edDirty = false
+  // 這次存檔的結果：saving / failed；savedAt = 最後一次確認內容寫進檔案的時間
+  let saveFlags = { saving: false, failed: false, savedAt: 0 }
+  // 這個 server 能不能把簡報存進 decks/（開機時問一次 /__decks）
+  let hasDeckServer = false
+  let deckServerReady = Promise.resolve()
+
+  const FILE_STATE_TEXT = {
+    new: '尚未存檔', dirty: '有未存的變更', saving: '存檔中…', saved: '已存檔', failed: '存檔失敗',
+  }
+
+  // 按 Ctrl+S 會寫到哪個檔；空字串 = 還沒有檔案
+  const saveTargetName = () =>
+    state.deckUrl
+    || (state.fileHandle && state.fileHandle.name)
+    || (state.dirHandle && state.mdPath)
+    || ''
+
+  const refreshFileChip = () => {
+    const target = saveTargetName()
+    const kind = SaveLogic.fileState({ ...saveFlags, dirty: edDirty, hasTarget: Boolean(target) })
+    const at = kind === 'saved' && saveFlags.savedAt
+      ? ` ${new Date(saveFlags.savedAt).toLocaleTimeString()}`
+      : ''
+    edFile.dataset.state = kind
+    edFileName.textContent = target || (state.mdPath ? state.mdPath.split('/').pop() : '未命名')
+    edFileState.textContent = `${FILE_STATE_TEXT[kind]}${at}`
+  }
 
   const setStatus = (msg, ok = false) => {
     edStatus.textContent = msg
-    edStatus.style.color = ok ? '#7dcf8a' : ''
+    edStatus.classList.toggle('ok', ok)
+    refreshFileChip()
   }
 
   const fitPreview = () => {
@@ -1557,8 +1893,9 @@ const FindReplace = (() => {
     stage.hidden = true
     editor.hidden = false
     edText.value = text
-    edDirty = false
-    setStatus('Ctrl+S 儲存 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁 · 播放中按 E 回編輯')
+    edDirty = !SaveLogic.sameText(text, state.cleanText)
+    saveFlags = { saving: false, failed: false, savedAt: 0 }
+    setStatus('')
     fitPreview()
     updatePreview(true)
     edText.focus()
@@ -1607,67 +1944,164 @@ const FindReplace = (() => {
     setTimeout(() => URL.revokeObjectURL(url), 5000)
   }
 
-  const serverAutoSave = async (text) => {
-    const base = (state.mdPath || '').split('/').pop()
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-    const rel = /^decks\//.test(state.mdPath)
-      ? state.mdPath
-      : `decks/${base && /\.(md|markdown)$/i.test(base) ? base : `未命名-${stamp}.md`}`
-    try {
-      const res = await fetch('/__save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...apiHeaders() },
-        body: JSON.stringify({ path: rel, text }),
-      })
-      if (!res.ok) return false
-      state.mdPath = rel
-      state.deckUrl = rel
-      document.title = `SimPPT — ${rel.split('/').pop()}`
-      return true
-    } catch {
-      return false
-    }
+  const encodePath = (rel) => rel.split('/').map(encodeURIComponent).join('/')
+
+  // 存完再讀回來比對 — 檔案裡的內容跟編輯器一樣，才算存好
+  const serverCopyMatches = async (rel, text) => {
+    const res = await fetch(`${encodePath(rel)}?t=${Date.now()}`, { cache: 'no-store' })
+    return res.ok && (await res.text()) === text
   }
 
-  const saveDeck = async () => {
-    const text = edText.value
+  const handleCopyMatches = async (handle, text) => (await (await handle.getFile()).text()) === text
+
+  // create = 只在沒有同名檔時才寫，已有同名檔丟 EEXIST，絕不覆蓋。
+  // expect = 編輯器以為檔案裡現在的內容；檔案被別的程式改過就丟 ECHANGED，不直接蓋。
+  const postDeck = async (rel, text, { create = false, expect } = {}) => {
+    const res = await fetch('/__save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...apiHeaders() },
+      body: JSON.stringify({ path: rel, text, create, expect: typeof expect === 'string' ? expect : undefined }),
+    })
+    if (res.status === 409) {
+      const { code } = await res.json().catch(() => ({}))
+      throw Object.assign(new Error('save refused'), { code: code || 'EEXIST' })
+    }
+    if (!res.ok) throw new Error(`server save ${res.status}`)
+  }
+
+  const saveToServer = async (rel, text, opts) => {
+    await postDeck(rel, text, opts)
+    if (!await serverCopyMatches(rel, text)) throw new Error('saved copy does not match')
+  }
+
+  // 存回原本的檔。檔案在別處被改過就先問，不悄悄蓋掉。回傳 false = 使用者選擇不蓋。
+  const saveOverServerDeck = async (rel, text) => {
     try {
+      await saveToServer(rel, text, { expect: state.cleanText })
+      return true
+    } catch (err) {
+      if (!err || err.code !== 'ECHANGED') throw err
+    }
+    const overwrite = window.confirm(
+      `${rel} 在別的地方被改過了（例如另一個編輯器）。\n\n按「確定」用你現在的內容蓋過去；按「取消」先不存，你的內容還在編輯器裡。`,
+    )
+    if (!overwrite) return false
+    await saveToServer(rel, text)
+    return true
+  }
+
+  // 有檔案 handle 卻拿不到寫入權限 = 存檔失敗，不要悄悄改存到別的地方
+  const saveToGrantedHandle = async (permissionHandle, getHandle, text) => {
+    if (!await ensureRW(permissionHandle)) throw new Error('no permission to write the opened file')
+    await saveToHandle(await getHandle(), text)
+  }
+
+  const saveToHandle = async (handle, text) => {
+    await writeTo(handle, text)
+    if (!await handleCopyMatches(handle, text)) throw new Error('saved copy does not match')
+    state.lastModified = (await handle.getFile()).lastModified
+  }
+
+  // 問檔名、存成 decks/ 裡的新檔。回傳存好的路徑；取消回傳 null。
+  // 撞名時留在對話框裡讓人改名，不會蓋掉原本那份。
+  const saveAsNewDeck = (text) => new Promise((resolve) => {
+    nameInput.value = state.mdPath
+      ? state.mdPath.split('/').pop().replace(MD_RE, '')
+      : SaveLogic.suggestName(text)
+    nameError.textContent = ''
+    nameModal.hidden = false
+    nameInput.focus()
+    nameInput.select()
+    // 這個對話框自己建立過的檔（寫進去了但核對沒過）— 重試時直接覆寫它，不算撞名
+    let createdHere = ''
+    const close = (result) => {
+      nameModal.hidden = true
+      nameCard.removeEventListener('submit', onSubmit)
+      nameCancelBtn.removeEventListener('click', onCancel)
+      nameModal.removeEventListener('keydown', onKey)
+      edText.focus()
+      resolve(result)
+    }
+    const onCancel = () => close(null)
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      close(null)
+    }
+    const onSubmit = async (e) => {
+      e.preventDefault()
+      const rel = SaveLogic.deckPathFor(nameInput.value)
+      if (!rel) {
+        nameError.textContent = '請輸入檔名'
+        return
+      }
+      nameSubmitBtn.disabled = true
+      try {
+        await postDeck(rel, text, { create: createdHere !== rel })
+        createdHere = rel
+        if (!await serverCopyMatches(rel, text)) throw new Error('saved copy does not match')
+        close(rel)
+      } catch (err) {
+        nameError.textContent = err && err.code === 'EEXIST'
+          ? `已經有「${rel.split('/').pop()}」了，換個名字（原本那份不會被蓋掉）`
+          : '存不進去，再試一次'
+      } finally {
+        nameSubmitBtn.disabled = false
+      }
+    }
+    nameCard.addEventListener('submit', onSubmit)
+    nameCancelBtn.addEventListener('click', onCancel)
+    nameModal.addEventListener('keydown', onKey)
+  })
+
+  const saveDeck = async () => {
+    if (saveFlags.saving) return
+    const text = edText.value
+    saveFlags = { ...saveFlags, saving: true }
+    refreshFileChip()
+    let saved = false
+    let failed = false
+    try {
+      await deckServerReady
       if (state.deckUrl) {
-        const res = await fetch('/__save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...apiHeaders() },
-          body: JSON.stringify({ path: state.deckUrl, text }),
-        })
-        if (!res.ok) throw new Error(`server save ${res.status}`)
-      } else if (state.fileHandle && await ensureRW(state.fileHandle)) {
-        await writeTo(state.fileHandle, text)
-        state.lastModified = (await state.fileHandle.getFile()).lastModified
-      } else if (state.dirHandle && state.mdPath && await ensureRW(state.dirHandle)) {
-        const handle = await handleForPath(state.dirHandle, state.mdPath)
-        await writeTo(handle, text)
-        state.lastModified = (await handle.getFile()).lastModified
-      } else if (/^https?:$/.test(location.protocol) && await serverAutoSave(text)) {
-        // 已直接存進 server 的 decks/
+        if (!await saveOverServerDeck(state.deckUrl, text)) return
+      } else if (state.fileHandle) {
+        await saveToGrantedHandle(state.fileHandle, () => state.fileHandle, text)
+      } else if (state.dirHandle && state.mdPath) {
+        await saveToGrantedHandle(state.dirHandle, () => handleForPath(state.dirHandle, state.mdPath), text)
+      } else if (hasDeckServer) {
+        const rel = await saveAsNewDeck(text)
+        if (!rel) return
+        state.deckUrl = rel
+        state.mdPath = rel
+        document.title = `SimPPT — ${rel.split('/').pop()}`
       } else if (window.showSaveFilePicker) {
         const handle = await window.showSaveFilePicker({
-          suggestedName: (state.mdPath || '簡報.md').split('/').pop(),
+          suggestedName: (state.mdPath || `${SaveLogic.suggestName(text)}.md`).split('/').pop(),
           types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
         })
         state.fileHandle = handle
         state.mdPath = handle.name
-        await writeTo(handle, text)
+        await saveToHandle(handle, text)
       } else {
         downloadMd(text)
       }
-      state.sourceText = text
-      edDirty = false
-      appendHistory(text, state.mdPath)
-      setStatus(`已儲存 ✓ ${state.deckUrl || state.mdPath || '簡報.md'} ${new Date().toLocaleTimeString()}`, true)
-      scheduleSave()
+      saved = true
     } catch (err) {
       if (err && err.name === 'AbortError') return
-      showToast('儲存失敗，改用下載')
+      failed = true
+      showToast('存檔失敗，已另外下載一份當備份')
       downloadMd(text)
+    } finally {
+      if (saved) {
+        state.sourceText = text
+        state.cleanText = text
+        edDirty = edText.value !== text
+        appendHistory(text, state.mdPath)
+      }
+      saveFlags = { saving: false, failed, savedAt: saved ? Date.now() : saveFlags.savedAt }
+      setStatus('')
+      if (saved) scheduleSave()
     }
   }
 
@@ -1697,7 +2131,7 @@ const FindReplace = (() => {
     edText.setSelectionRange(adjust(selStart), adjust(selEnd))
     edText.scrollTop = scroll
     edDirty = true
-    setStatus('未儲存變更')
+    setStatus('')
     updatePreview()
     scheduleSave()
   }
@@ -2049,7 +2483,7 @@ const FindReplace = (() => {
   const replaceSelection = (replacement) => {
     edText.setRangeText(replacement, edText.selectionStart, edText.selectionEnd, 'select')
     edDirty = true
-    setStatus('未儲存變更')
+    setStatus('')
     updatePreview(true)
     scheduleSave()
     updateTxtTools()
@@ -2117,11 +2551,94 @@ const FindReplace = (() => {
     }, 150)
   })
 
+  // --- 首頁：存在這台 decks/ 裡的簡報 ---
+
+  const SVG_NS = 'http://www.w3.org/2000/svg'
+  const icon = (id) => {
+    const svg = document.createElementNS(SVG_NS, 'svg')
+    const use = document.createElementNS(SVG_NS, 'use')
+    svg.setAttribute('class', 'ic')
+    use.setAttribute('href', `#${id}`)
+    svg.append(use)
+    return svg
+  }
+
+  const pad2 = (n) => String(n).padStart(2, '0')
+  const fmtWhen = (ms) => {
+    const d = new Date(ms)
+    const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+    return d.toDateString() === new Date().toDateString()
+      ? `今天 ${time}`
+      : `${d.getMonth() + 1}/${d.getDate()} ${time}`
+  }
+
+  const openServerDeck = async (rel) => {
+    try {
+      const res = await fetch(`${encodePath(rel)}?t=${Date.now()}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`load ${res.status}`)
+      const text = await res.text()
+      stopPolling()
+      revokeBlobs()
+      state.deckUrl = rel
+      state.mdPath = rel
+      state.fileMap = new Map()
+      state.deckBaseUrl = rel.slice(0, rel.lastIndexOf('/') + 1)
+      state.sourceText = text
+      state.cleanText = text
+      state.index = 0
+      enterEditor(text)
+      document.title = `SimPPT — ${rel.split('/').pop()}`
+    } catch (err) {
+      showToast(`打不開 ${rel}`)
+    }
+  }
+
+  const deckRow = (deck) => {
+    const li = document.createElement('li')
+    li.className = 'deck-row'
+    const open = document.createElement('button')
+    open.className = 'deck-open'
+    open.title = '編輯'
+    const name = document.createElement('span')
+    name.className = 'deck-name'
+    name.textContent = deck.name.replace(MD_RE, '')
+    const when = document.createElement('span')
+    when.className = 'deck-time'
+    when.textContent = fmtWhen(deck.mtime)
+    open.append(icon('i-file'), name, when)
+    open.addEventListener('click', () => openServerDeck(deck.path))
+    const play = document.createElement('a')
+    play.className = 'deck-play'
+    play.href = `?deck=${encodeURIComponent(deck.path)}`
+    play.title = '直接播放'
+    play.setAttribute('aria-label', `播放 ${deck.name}`)
+    play.append(icon('i-play'))
+    li.append(open, play)
+    return li
+  }
+
+  const loadDeckList = async () => {
+    if (!/^https?:$/.test(location.protocol)) return
+    try {
+      const res = await fetch('/__decks', { headers: apiHeaders(), cache: 'no-store' })
+      const json = res.ok ? await res.json() : null
+      hasDeckServer = Boolean(json && json.ok)
+      if (!hasDeckServer) return
+      deckList.replaceChildren(...json.decks.map(deckRow))
+      deckEmpty.hidden = json.decks.length > 0
+      landDecks.hidden = false
+      landGrid.classList.remove('solo')
+    } catch (err) {
+      hasDeckServer = false
+    }
+  }
+
   newDeckBtn.addEventListener('click', () => {
     stopPolling()
     state.mdPath = ''
     state.fileMap = new Map()
     state.sourceText = ''
+    state.cleanText = NEW_DECK_TEMPLATE
     enterEditor(NEW_DECK_TEMPLATE)
   })
 
@@ -2176,7 +2693,9 @@ const FindReplace = (() => {
         state.mdPath = ''
         state.fileMap = new Map()
         state.sourceText = ''
+        state.cleanText = null
       }
+      // AI 給的內容還沒寫進任何檔案 — enterEditor 會拿它跟 cleanText 比，標成有未存的變更
       enterEditor(data.markdown)
     } catch (err) {
       genError.textContent = `連線失敗：${err.message}`
@@ -2282,8 +2801,8 @@ const FindReplace = (() => {
     stopPolling()
     state.mdPath = snap.mdPath || ''
     state.fileMap = new Map()
+    state.cleanText = null
     enterEditor(snap.text)
-    edDirty = true
     setStatus(`歷史備份 ${historyCursor + 1}/${hist.length} — ${new Date(snap.t).toLocaleString()}（回首頁再按可看更舊的）`)
   })
   edPlayBtn.addEventListener('click', playFromEditor)
@@ -2303,11 +2822,12 @@ const FindReplace = (() => {
     stage.hidden = true
     landing.hidden = false
     document.title = 'SimPPT'
+    loadDeckList()
   })
 
   edText.addEventListener('input', () => {
     edDirty = true
-    setStatus('未儲存變更')
+    setStatus('')
     updatePreview(true)
     scheduleSave()
   })
@@ -2359,11 +2879,11 @@ const FindReplace = (() => {
       const url = json && json.data && json.data.url_direct
       if (!url) throw new Error((json && json.message) || 'no url')
       replaceKeepCaret(placeholder, `![](${url})`)
-      setStatus('圖片已上傳 ✓', true)
+      setStatus('圖片已上傳', true)
     } catch (err) {
       replaceKeepCaret(`\n${placeholder}\n`, '')
       showToast('圖片上傳失敗，再試一次或檢查網路')
-      setStatus('未儲存變更')
+      setStatus('')
     }
     edDirty = true
     updatePreview(true)
@@ -2803,6 +3323,8 @@ const FindReplace = (() => {
       view,
       text: !editor.hidden ? edText.value : state.sourceText,
       mdPath: state.mdPath,
+      deckUrl: state.deckUrl,
+      baseUrl: state.deckBaseUrl,
       index: state.index,
       dirty: edDirty,
       cursor: !editor.hidden ? edText.selectionStart : 0,
@@ -2855,9 +3377,12 @@ const FindReplace = (() => {
         }
       }
       state.sourceText = s.text
+      state.cleanText = s.dirty ? null : s.text
+      state.deckUrl = s.deckUrl || ''
+      state.deckBaseUrl = s.baseUrl || ''
       if (s.view === 'play') {
         state.index = s.index || 0
-        loadDeck(s.text, state.mdPath || '未命名.md', state.fileMap)
+        loadDeck(s.text, state.mdPath || '未命名.md', state.fileMap, s.baseUrl || '')
       } else {
         enterEditor(s.text)
         if (typeof s.cursor === 'number') {
@@ -2865,10 +3390,7 @@ const FindReplace = (() => {
           edText.scrollTop = s.scroll || 0
           updatePreview(true)
         }
-        if (s.dirty) {
-          edDirty = true
-          setStatus('未儲存變更（重整前的內容已還原）')
-        }
+        if (s.dirty) setStatus('重整前的內容已還原')
       }
       return true
     } catch {
@@ -2896,6 +3418,7 @@ const FindReplace = (() => {
         if (text === state.sourceText) return true
         if (!editor.hidden || edDirty) return true
         appendHistory(state.sourceText, state.mdPath)
+        state.cleanText = text
         loadDeck(text, deckParam, new Map(), baseUrl)
         state.deckUrl = deckParam
         return true
@@ -2920,6 +3443,7 @@ const FindReplace = (() => {
       if (channel) channel.postMessage({ type: 'hello' })
       return
     }
+    deckServerReady = loadDeckList()
     const deckParam = /^https?:$/.test(location.protocol)
       ? new URLSearchParams(location.search).get('deck')
       : null

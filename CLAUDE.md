@@ -5,7 +5,7 @@
 ## 開發
 
 - `npm start` → http://localhost:4646（`PORT` 可換）
-- `npm test` → parser 單元測試（`test/parser.test.mjs`，從 index.html 抽 parser script 跑 node:assert）
+- `npm test` → 單元測試（`test/*.test.mjs`）：parser、搜尋取代、存檔邏輯是從 index.html 抽對應的 `<script id>` 跑 node:assert；`lib/deck-store.mjs` 直接 import
 - 改 parser 必跑測試；UI 邏輯改完用 `new Function(script)` 做語法檢查
 
 ## 部署（CloudPipe）
@@ -13,6 +13,18 @@
 - 正式站：https://simppt.isnowfriend.com （cloudpipe 專案 id `simppt`，port 4036，pm2 `simppt`）
 - 真實部署目錄：`Desktop\code\workhub\simppt`（cloudpipe git fetch/reset 在那裡）；本目錄（`Desktop\code\simppt`）是開發正本，push 到 GitHub `Jeffrey0117/SimPPT` 即自動部署
 - `/__save`、`/__upload` 受 `SIMPPT_TOKEN` 環境變數保護（在 cloudpipe env，用 env API 讀）；瀏覽器端用 `?token=xxx` 開一次即記住（localStorage `simppt-token`）。本機無該環境變數則不設防
+
+## 存檔（別改壞）
+
+- 寫檔都走 `lib/deck-store.mjs` 的 `writeDeck`：先寫暫存檔再改名（不會留下寫一半的檔），寫完讀回比對。`create: true` 只在沒有同名檔時才寫，撞名回 409
+- 前端 `saveDeck`：已知來源（`state.deckUrl`／檔案 handle／資料夾 handle）才覆寫；其餘一律走 `saveAsNewDeck`（問檔名、`create: true`），所以沒開過的檔不會被悄悄蓋掉
+- 存完會把檔案再抓回來跟編輯器內容比對，一樣才顯示「已存檔」。狀態由 `SaveLogic.fileState` 決定，畫在右上角 `#ed-file`
+- `GET /__decks` 列出 `decks/*.md`（跟 `/__save` 同一個 token 檢查）；前端用它判斷這個 server 能不能存（`hasDeckServer`）
+
+## 介面
+
+- 顏色、字體、間距都是 `:root` 的 `--color-*`／`--font-*`／`--space-*`（OKLCH，暖色調深色），新樣式一律用 token，不要寫死色碼。投影片內容的顏色由簡報自己決定，不吃這些 token
+- 圖示是 `<body>` 開頭的 SVG sprite（Lucide 線條），用 `<svg class="ic"><use href="#i-名稱"/></svg>`；不用 emoji
 
 ## 架構要點
 

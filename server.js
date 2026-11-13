@@ -4,6 +4,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildGeneratePrompt, buildRevisePrompt } from './lib/generate-prompt.mjs'
 import { runClaudePrint } from './lib/run-claude.mjs'
+import { writeDeck, listDecks } from './lib/deck-store.mjs'
+
+// Why a save was refused, as an HTTP status the editor can tell apart.
+const SAVE_ERROR_STATUS = { EFORBIDDEN: 403, EEXIST: 409, ECHANGED: 409, EVERIFY: 500 }
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 4646
@@ -72,21 +76,26 @@ const server = http.createServer((req, res) => {
       req.on('data', (chunk) => { body += chunk })
       req.on('end', () => {
         try {
-          const { path: rel, text } = JSON.parse(body)
-          const full = path.resolve(ROOT, rel)
-          if (!full.startsWith(ROOT + path.sep) || !/\.(md|markdown)$/i.test(full) || typeof text !== 'string') {
-            res.writeHead(403)
-            res.end('Forbidden')
-            return
-          }
-          fs.writeFileSync(full, text, 'utf8')
+          const { path: rel, text, create, expect } = JSON.parse(body)
+          const saved = writeDeck(ROOT, rel, text, { create: create === true, expect })
           res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end('{"ok":true}')
+          res.end(JSON.stringify({ ok: true, ...saved }))
         } catch (err) {
-          res.writeHead(400)
-          res.end('Bad request')
+          const status = SAVE_ERROR_STATUS[err.code] || (err instanceof SyntaxError ? 400 : 500)
+          res.writeHead(status, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, code: err.code || 'EBADREQUEST' }))
         }
       })
+      return
+    }
+    if (req.method === 'GET' && urlPath === '/__decks') {
+      if (!authorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' })
+        res.end('{"ok":false}')
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ ok: true, decks: listDecks(ROOT) }))
       return
     }
     if (req.method === 'POST' && urlPath === '/__generate') {
