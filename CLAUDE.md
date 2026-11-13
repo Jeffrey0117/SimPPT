@@ -39,6 +39,12 @@
 - 不變量：操作後每一頁的內容與實際生效的設定都跟原本一樣。改這段之前先跑 `npm test`
 - 刪頁不跳確認視窗，做完在狀態列放「復原」（`pageUndo`，只記一步，內容再被改動就失效）
 
+## 快捷鍵
+
+- 編輯器的 Ctrl 系列快捷鍵集中在一個 `keydown`（capture）裡；畫面上的快捷鍵表（Ctrl+/）由 `SHORTCUTS` 陣列產生 — 加新快捷鍵兩邊都要改，README 的表也要補
+- 對話框開著時（`dialogOpen()`）頁面操作類的快捷鍵不作用
+- 用程式換掉 textarea 內容一律走 `replaceEditorText`：它會把游標留在目前那一頁，否則下一次 keyup 預覽會跳到最後一頁
+
 ## 架構要點
 
 - 單檔原則：不引外部依賴；favicon 是 inline SVG data URI

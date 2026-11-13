@@ -523,7 +523,18 @@
     display: flex; align-items: center; justify-content: center;
   }
   #ed-pageinfo { font-size: var(--text-md); color: var(--color-muted); font-variant-numeric: tabular-nums; }
-  #ed-shortcuts { font-size: var(--text-xs); color: var(--color-neutral); }
+  #ed-keys { height: 28px; padding: 0 var(--space-2); gap: 6px; font-size: var(--text-xs); color: var(--color-neutral); }
+  #keys-card { width: min(720px, 92vw); gap: var(--space-5); overflow-y: auto; }
+  #keys-card header { display: flex; align-items: center; justify-content: space-between; }
+  #keys-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5) var(--space-7); }
+  #keys-grid h3 {
+    font-size: var(--text-xs); font-weight: 600; color: var(--color-neutral);
+    padding-bottom: var(--space-2); margin-bottom: var(--space-1); border-bottom: 1px solid var(--color-rule);
+  }
+  #keys-grid dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3); align-items: center; }
+  #keys-grid dt { font-size: var(--text-sm); color: var(--color-muted); }
+  #keys-grid dd { display: inline-flex; gap: 3px; justify-content: flex-end; white-space: nowrap; }
+  @media (max-width: 640px) { #keys-grid { grid-template-columns: minmax(0, 1fr); } }
   #ed-pagebar { display: flex; align-items: center; gap: var(--space-1); }
   #ed-page-more { width: 28px; height: 28px; }
   /* 這一頁的操作（右鍵選單） */
@@ -543,6 +554,8 @@
     background: none; border: 0; border-radius: var(--radius-s); cursor: pointer;
   }
   #page-menu button .ic { color: var(--color-neutral); }
+  #page-menu button kbd:first-of-type { margin-left: auto; }
+  #page-menu button kbd + kbd { margin-left: -5px; }
   #page-menu button:hover:not(:disabled) { background: var(--color-paper-4); }
   #page-menu button:disabled { color: var(--color-neutral); opacity: 0.5; cursor: default; }
   #page-menu hr { border: 0; border-top: 1px solid var(--color-rule); margin: var(--space-1) 0; }
@@ -918,7 +931,7 @@
         <span id="ed-pageinfo"></span>
         <button id="ed-page-more" class="btn btn-ghost btn-icon" title="這一頁的操作（也可以在投影片或縮圖上按右鍵）" aria-label="這一頁的操作"><svg class="ic"><use href="#i-more"/></svg></button>
       </div>
-      <div id="ed-shortcuts">Ctrl+S 存檔 · Ctrl+Enter 播放 · Ctrl+H 搜尋取代 · Ctrl+方向鍵 換頁 · 播放中按 E 回編輯</div>
+      <button id="ed-keys" class="btn btn-ghost" title="看所有快捷鍵">快捷鍵<kbd>Ctrl</kbd><kbd>/</kbd></button>
     </div>
   </div>
 </section>
@@ -954,10 +967,20 @@
 
 <div id="stage-wait" hidden>等待講者視窗連線…<br><small>回到另一個視窗按「講者」</small></div>
 
+<div id="keys-modal" class="modal" hidden>
+  <div id="keys-card" class="card">
+    <header>
+      <h2>快捷鍵</h2>
+      <button type="button" id="keys-close" class="btn btn-ghost btn-icon" aria-label="關閉"><svg class="ic"><use href="#i-x"/></svg></button>
+    </header>
+    <div id="keys-grid"></div>
+  </div>
+</div>
+
 <div id="page-menu" role="menu" hidden>
   <div id="page-menu-title"></div>
-  <button type="button" role="menuitem" data-op="duplicate"><svg class="ic"><use href="#i-copy"/></svg>複製這一頁</button>
-  <button type="button" role="menuitem" data-op="add"><svg class="ic"><use href="#i-plus"/></svg>在後面新增一頁</button>
+  <button type="button" role="menuitem" data-op="duplicate"><svg class="ic"><use href="#i-copy"/></svg>複製這一頁<kbd>Ctrl</kbd><kbd>D</kbd></button>
+  <button type="button" role="menuitem" data-op="add"><svg class="ic"><use href="#i-plus"/></svg>在後面新增一頁<kbd>Ctrl</kbd><kbd>M</kbd></button>
   <hr>
   <button type="button" role="menuitem" data-op="prev"><svg class="ic"><use href="#i-arrow-left"/></svg>往前移</button>
   <button type="button" role="menuitem" data-op="next"><svg class="ic"><use href="#i-arrow-right"/></svg>往後移</button>
@@ -1311,6 +1334,25 @@ const SimpptParser = (() => {
   // 把第 index 頁往前（delta = -1）或往後（+1）移一格。到頭了就不動。
   const moveSlide = (text, index, delta) => moveSlideTo(text, index, index + delta)
 
+  // 在清單裡按 Enter：接著開下一點（編號自動加一）；在空的那一點按 Enter 則結束清單。
+  // pos = 游標位置。不是清單、或游標還在標記裡面，就回 null 交給瀏覽器照常換行。
+  const continueList = (text, pos) => {
+    const lineStart = text.lastIndexOf('\n', pos - 1) + 1
+    const nextBreak = text.indexOf('\n', pos)
+    const lineEnd = nextBreak < 0 ? text.length : nextBreak
+    const m = text.slice(lineStart, lineEnd).match(/^(\s*)([-*]|\d+\.)(\s+)(.*)$/)
+    if (!m) return null
+    const [, indent, marker, gap, rest] = m
+    const contentStart = lineStart + indent.length + marker.length + gap.length
+    if (pos < contentStart) return null
+    if (rest.trim() === '') {
+      return { text: text.slice(0, lineStart) + text.slice(lineEnd), pos: lineStart }
+    }
+    const nextMarker = /^\d+\.$/.test(marker) ? (parseInt(marker, 10) + 1) + '.' : marker
+    const insert = '\n' + indent + nextMarker + ' '
+    return { text: text.slice(0, pos) + insert + text.slice(pos), pos: pos + insert.length }
+  }
+
   const escapeHtml = (s) => s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -1451,7 +1493,7 @@ const SimpptParser = (() => {
 
   return {
     parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE,
-    setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo,
+    setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo, continueList,
   }
 })()
 </script>
@@ -2426,14 +2468,14 @@ const SaveLogic = (() => {
     scheduleSave()
   }
 
-  const playFromEditor = () => {
+  const playFromEditor = (fromStart = false) => {
     const text = edText.value
     const deck = SimpptParser.parse(text)
     if (deck.slides.length === 0) {
       showToast('目前內容解析不出任何頁面')
       return
     }
-    const target = deck.slides.findIndex((s) => s.raw >= previewIdx)
+    const target = fromStart ? 0 : deck.slides.findIndex((s) => s.raw >= previewIdx)
     state.index = target >= 0 ? target : deck.slides.length - 1
     loadDeck(text, state.mdPath || '未命名.md', state.fileMap)
     if (state.fileHandle || state.dirHandle) startHandleWatch()
@@ -3056,6 +3098,14 @@ const SaveLogic = (() => {
     replaceSelection(ser ? `{{${inner}|${ser}}}` : inner)
   }
 
+  const inlineItalic = () => {
+    if (edText.selectionEnd <= edText.selectionStart) return
+    const selected = edText.value.slice(edText.selectionStart, edText.selectionEnd)
+    if (/\n/.test(selected)) return
+    if (/^\*[^*][\s\S]*\*$/.test(selected) || /^\*[^*]\*$/.test(selected)) replaceSelection(selected.slice(1, -1))
+    else replaceSelection('*' + selected + '*')
+  }
+
   const inlineBold = () => {
     if (edText.selectionEnd <= edText.selectionStart) return
     const { selected, attrs } = selectedInline()
@@ -3142,7 +3192,18 @@ const SaveLogic = (() => {
   // 把整份文字換掉（版型、配色、插頁用）— 跟手動打字走同一條路，才會標成未存、更新預覽
   const replaceEditorText = (text) => {
     const scroll = edText.scrollTop
+    const caret = edText.selectionStart
     edText.value = text
+    // 換掉 value 會把游標丟到文末，預覽下一次跟著游標走就跳到最後一頁。
+    // 把游標留在原本那一頁的範圍裡。
+    const range = SimpptParser.slideLineRange(text, previewIdx)
+    if (range) {
+      const lines = text.split('\n')
+      const from = lines.slice(0, range.start).join('\n').length + (range.start > 0 ? 1 : 0)
+      const to = lines.slice(0, range.end).join('\n').length
+      const at = Math.max(from, Math.min(caret, to))
+      edText.setSelectionRange(at, at)
+    }
     edText.scrollTop = scroll
     edDirty = true
     setStatus('')
@@ -3166,6 +3227,14 @@ const SaveLogic = (() => {
     }
   }
 
+  const applyPresetToPage = (preset) => {
+    // 置中 = 拿掉 layout；但整份簡報在 frontmatter 設了別的版型時，要明講這頁用置中
+    const { globalLayout } = currentLayout()
+    const value = preset.id || (globalLayout ? 'center' : null)
+    replaceEditorText(SimpptParser.setSlideDirectives(edText.value, previewIdx, { layout: value }))
+    markCurrentPreset()
+  }
+
   const usePreset = (preset) => {
     if (presetMode === 'insert') {
       const out = SimpptParser.insertSlideAfter(edText.value, previewIdx, preset.id ? ('layout=' + preset.id) : '', preset.body)
@@ -3174,11 +3243,7 @@ const SaveLogic = (() => {
       edText.focus()
       return
     }
-    // 置中 = 拿掉 layout；但整份簡報在 frontmatter 設了別的版型時，要明講這頁用置中
-    const { globalLayout } = currentLayout()
-    const value = preset.id || (globalLayout ? 'center' : null)
-    replaceEditorText(SimpptParser.setSlideDirectives(edText.value, previewIdx, { layout: value }))
-    markCurrentPreset()
+    applyPresetToPage(preset)
   }
 
   const useColors = (tone) => {
@@ -3606,7 +3671,7 @@ const SaveLogic = (() => {
     enterEditor(snap.text)
     setStatus(`歷史備份 ${historyCursor + 1}/${hist.length} — ${new Date(snap.t).toLocaleString()}（回首頁再按可看更舊的）`)
   })
-  edPlayBtn.addEventListener('click', playFromEditor)
+  edPlayBtn.addEventListener('click', () => playFromEditor())
   document.getElementById('ed-fs').addEventListener('click', (e) => {
     e.stopPropagation()
     playFromEditor()
@@ -3710,8 +3775,141 @@ const SaveLogic = (() => {
 
   window.addEventListener('beforeunload', () => saveSession())
 
+  // --- 快捷鍵一覽（Ctrl+/）：這張表也是畫面上那份說明的唯一來源 ---
+
+  const SHORTCUTS = [
+    { title: '檔案與播放', rows: [
+      ['存檔', ['Ctrl', 'S']],
+      ['從這一頁播放', ['Ctrl', 'Enter']],
+      ['從第一頁播放', ['Ctrl', 'Shift', 'Enter']],
+      ['搜尋並取代', ['Ctrl', 'H']],
+      ['這張快捷鍵表', ['Ctrl', '/']],
+    ] },
+    { title: '頁面', rows: [
+      ['上一頁／下一頁', ['Ctrl', '↑ ↓']],
+      ['複製這一頁', ['Ctrl', 'D']],
+      ['在後面新增一頁', ['Ctrl', 'M']],
+      ['這一頁往前／往後移', ['Ctrl', 'Shift', '↑ ↓']],
+      ['刪除這一頁', ['Ctrl', 'Shift', 'Backspace']],
+      ['復原剛才的頁面操作', ['Ctrl', 'Z']],
+    ] },
+    { title: '寫字', rows: [
+      ['粗體（會帶重點色）', ['Ctrl', 'B']],
+      ['斜體', ['Ctrl', 'I']],
+      ['清單自動接下一點', ['Enter']],
+      ['套用版型（依面板順序）', ['Alt', '1 – 8']],
+    ] },
+    { title: '播放中', rows: [
+      ['翻頁', ['← →', '空白鍵']],
+      ['全螢幕', ['F']],
+      ['頁碼', ['P']],
+      ['畫筆／清筆跡', ['D', 'X']],
+      ['回編輯器', ['E', 'Esc']],
+    ] },
+  ]
+
+  const keysModal = document.getElementById('keys-modal')
+  const keysGrid = document.getElementById('keys-grid')
+
+  const buildKeysSheet = () => {
+    keysGrid.replaceChildren(...SHORTCUTS.map((group) => {
+      const section = document.createElement('section')
+      const title = document.createElement('h3')
+      title.textContent = group.title
+      const list = document.createElement('dl')
+      for (const [label, keys] of group.rows) {
+        const dt = document.createElement('dt')
+        dt.textContent = label
+        const dd = document.createElement('dd')
+        dd.append(...keys.map((key) => {
+          const cap = document.createElement('kbd')
+          cap.textContent = key
+          return cap
+        }))
+        list.append(dt, dd)
+      }
+      section.append(title, list)
+      return section
+    }))
+  }
+
+  const closeKeysSheet = () => {
+    keysModal.hidden = true
+  }
+
+  const toggleKeysSheet = () => {
+    if (keysGrid.children.length === 0) buildKeysSheet()
+    keysModal.hidden = !keysModal.hidden
+  }
+
+  document.getElementById('ed-keys').addEventListener('click', toggleKeysSheet)
+  document.getElementById('keys-close').addEventListener('click', closeKeysSheet)
+  keysModal.addEventListener('pointerdown', (e) => {
+    if (e.target === keysModal) closeKeysSheet()
+  })
+
+  // 對話框開著的時候，編輯器的快捷鍵都先停用（存檔、播放除外的那些新鍵）
+  const dialogOpen = () => Boolean(document.querySelector('.modal:not([hidden])'))
+
+  const pageOpHere = (name) => {
+    menuPage = previewIdx
+    runPageOp(name)
+  }
+
+  // 在清單裡按 Enter 接下一點
+  edText.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing) return
+    if (edText.selectionStart !== edText.selectionEnd) return
+    const out = SimpptParser.continueList(edText.value, edText.selectionStart)
+    if (!out) return
+    e.preventDefault()
+    const scroll = edText.scrollTop
+    edText.value = out.text
+    edText.setSelectionRange(out.pos, out.pos)
+    edText.scrollTop = scroll
+    edText.dispatchEvent(new Event('input'))
+  })
+
+  // Alt+數字：把目前這頁換成面板上第幾個版型
   document.addEventListener('keydown', (e) => {
+    if (editor.hidden || !e.altKey || e.ctrlKey || e.metaKey || dialogOpen()) return
+    const n = /^Digit([1-9])$/.exec(e.code)
+    const preset = n && LAYOUT_PRESETS[Number(n[1]) - 1]
+    if (!preset) return
+    e.preventDefault()
+    applyPresetToPage(preset)
+    setStatus('版型：' + preset.name)
+  })
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !keysModal.hidden) {
+      closeKeysSheet()
+      return
+    }
     if (editor.hidden || !(e.ctrlKey || e.metaKey)) return
+    if (e.code === 'Slash' || e.key === '/') {
+      e.preventDefault()
+      toggleKeysSheet()
+      return
+    }
+    if (!dialogOpen()) {
+      const up = ['ArrowUp', 'ArrowLeft'].includes(e.key)
+      const down = ['ArrowDown', 'ArrowRight'].includes(e.key)
+      const handled = (() => {
+        if (e.shiftKey && (up || down)) return pageOpHere(up ? 'prev' : 'next') || true
+        if (e.shiftKey && e.key === 'Backspace') return pageOpHere('delete') || true
+        if (e.shiftKey && e.key === 'Enter') return playFromEditor(true) || true
+        if (!e.shiftKey && e.code === 'KeyD') return pageOpHere('duplicate') || true
+        if (!e.shiftKey && e.code === 'KeyM') return pageOpHere('add') || true
+        if (!e.shiftKey && e.code === 'KeyI' && document.activeElement === edText) return inlineItalic() || true
+        return false
+      })()
+      if (handled) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
+    }
     if (e.code === 'KeyS' || e.key === 's' || e.key === 'S') {
       e.preventDefault()
       saveDeck()

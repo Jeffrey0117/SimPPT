@@ -439,6 +439,34 @@ test('moveSlide at either end does nothing; untouched separators keep their exac
   assert.equal(moveSlide(spaced, 3, -1).text.includes('---   bg=#123    layout=top'), true)
 })
 
+test('continueList starts the next item when Enter is pressed at the end of one', () => {
+  const { continueList } = SimpptParser
+  assert.deepEqual(continueList('- one', 5), { text: '- one\n- ', pos: 8 })
+  assert.deepEqual(continueList('# T\n\n* a\n\nafter', 8), { text: '# T\n\n* a\n* \n\nafter', pos: 11 })
+  assert.deepEqual(continueList('1. first', 8), { text: '1. first\n2. ', pos: 12 })
+  assert.deepEqual(continueList('9. nine', 7), { text: '9. nine\n10. ', pos: 12 })
+})
+
+test('continueList splits an item when Enter is pressed in the middle of it', () => {
+  const { continueList } = SimpptParser
+  assert.deepEqual(continueList('- onetwo', 5), { text: '- one\n- two', pos: 8 })
+})
+
+test('continueList ends the list when Enter is pressed on an empty item', () => {
+  const { continueList } = SimpptParser
+  assert.deepEqual(continueList('- one\n- ', 8), { text: '- one\n', pos: 6 })
+  assert.deepEqual(continueList('1. a\n2. ', 8), { text: '1. a\n', pos: 5 })
+})
+
+test('continueList leaves everything else to the browser', () => {
+  const { continueList } = SimpptParser
+  assert.equal(continueList('plain text', 5), null)
+  assert.equal(continueList('# heading', 9), null)
+  assert.equal(continueList('--- layout=top', 14), null)
+  assert.equal(continueList('- one', 1), null)
+  assert.equal(continueList('', 0), null)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {
