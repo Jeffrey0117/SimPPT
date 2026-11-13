@@ -510,6 +510,61 @@ test('what blockText gives back, rewriteBlock writes back unchanged', () => {
   for (let k = 0; k < 4; k += 1) assert.deepEqual(rewriteBlock(BODY, k, blockText(body, k).text), BODY)
 })
 
+test('a video file on an image line renders a player', () => {
+  assert.equal(
+    renderMarkdown('![demo](clips/a.mp4)', (src) => `blob:${src}`),
+    '<figure><video src="blob:clips/a.mp4" controls playsinline preload="metadata"></video></figure>',
+  )
+  assert.equal(
+    renderMarkdown('![](https://x.test/a.WEBM?t=1){w=40}'),
+    '<figure><video src="https://x.test/a.WEBM?t=1" controls playsinline preload="metadata" style="width:40vw"></video></figure>',
+  )
+  assert.equal(
+    renderMarkdown('![](a.mov){x=10 y=20 w=30}'),
+    '<figure class="img-abs" style="left:10%;top:20%;width:30%"><video src="a.mov" controls playsinline preload="metadata"></video></figure>',
+  )
+})
+
+test('a YouTube link on an image line renders a cover that carries the video id', () => {
+  const cover = '<img src="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg" alt="">'
+  for (const url of [
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtu.be/dQw4w9WgXcQ?si=abc',
+    'https://www.youtube.com/watch?list=PL1&v=dQw4w9WgXcQ&t=5s',
+    'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+    'https://m.youtube.com/embed/dQw4w9WgXcQ',
+  ]) {
+    assert.equal(renderMarkdown(`![](${url})`, () => 'never-resolved'), `<figure data-yt="dQw4w9WgXcQ">${cover}</figure>`, url)
+  }
+  assert.equal(
+    renderMarkdown('![](https://youtu.be/dQw4w9WgXcQ){x=5 y=6 w=50}'),
+    `<figure class="img-abs" data-yt="dQw4w9WgXcQ" style="left:5%;top:6%;width:50%">${cover}</figure>`,
+  )
+})
+
+test('ordinary images and look-alike links stay images', () => {
+  assert.equal(renderMarkdown('![p](a.png)'), '<figure><img src="a.png" alt="p"></figure>')
+  assert.equal(
+    renderMarkdown('![](https://notyoutube.com/watch?v=dQw4w9WgXcQ)'),
+    '<figure><img src="https://notyoutube.com/watch?v=dQw4w9WgXcQ" alt=""></figure>',
+  )
+  assert.equal(
+    renderMarkdown('![](https://www.youtube.com/watch?v="onload=x)'),
+    '<figure><img src="https://www.youtube.com/watch?v=&quot;onload=x" alt=""></figure>',
+  )
+})
+
+test('mediaLine turns a pasted video link into an image line, and nothing else', () => {
+  const { mediaLine } = SimpptParser
+  assert.equal(mediaLine(' https://youtu.be/dQw4w9WgXcQ \n'), '![](https://youtu.be/dQw4w9WgXcQ)')
+  assert.equal(mediaLine('https://x.test/a.mp4'), '![](https://x.test/a.mp4)')
+  assert.equal(mediaLine('https://x.test/a.png'), null)
+  assert.equal(mediaLine('看這個 https://youtu.be/dQw4w9WgXcQ'), null)
+  assert.equal(mediaLine('https://youtu.be/dQw4w9WgXcQ\nhttps://youtu.be/dQw4w9WgXcQ'), null)
+  assert.equal(mediaLine('https://x.test/a b.mp4'), null)
+  assert.equal(mediaLine('https://x.test/a).mp4'), null)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

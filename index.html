@@ -285,9 +285,15 @@
   }
   .deck-slide.layout-big p { font-size: calc(2.8vw * var(--ts, 1)); opacity: 0.75; }
   .slide-scope figure { margin: 0; min-height: 0; }
-  .slide-scope img {
+  .slide-scope :is(img, video, iframe) {
     display: block; max-width: 80vw; max-height: 38vw; border-radius: 0.5vw;
   }
+  /* YouTube：封面圖和播放器同一個大小（16:9），播放時才把封面換成播放器 */
+  figure[data-yt] :is(img, iframe) { aspect-ratio: 16 / 9; height: auto; object-fit: cover; border: 0; }
+  .slide-scope figure[data-yt] :is(img, iframe) { width: 56vw; }
+  /* 編輯器和縮圖裡，影片只是一塊可以拖的東西；播放時才按得到 */
+  figure video { pointer-events: none; }
+  #stage figure :is(video, iframe) { pointer-events: auto; }
 
   .txt-abs {
     position: absolute; margin: 0;
@@ -307,7 +313,7 @@
   #guide-v { top: 0; bottom: 0; width: 0; border-left: 0.15vw dashed var(--color-danger); }
   #guide-h { left: 0; right: 0; height: 0; border-top: 0.15vw dashed var(--color-danger); }
   .img-abs { position: absolute; margin: 0; }
-  .img-abs img {
+  .img-abs :is(img, video, iframe) {
     width: 100%; height: auto; max-width: none; max-height: none;
     border-radius: 0.5vw; display: block;
   }
@@ -1464,6 +1470,32 @@ const SimpptParser = (() => {
     return `${abs ? ' class="txt-abs"' : ''} style="${styles.join(';')}"`
   }
 
+  // --- 影片：寫法跟圖片一樣 ![](網址)，看網址決定放什麼 ---
+  const VIDEO_FILE_RE = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#]|$)/i
+  const YOUTUBE_RE = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[?&#/]|$)/
+
+  const youtubeId = (src) => {
+    const found = YOUTUBE_RE.exec(src)
+    return found ? found[1] : null
+  }
+
+  // YouTube 先放封面圖（縮圖列、編輯器都只是一張圖），播放時才換成播放器
+  const mediaHtml = (b, resolveSrc, styleAttr) => {
+    const yt = youtubeId(b.src)
+    if (yt) return `<img src="https://i.ytimg.com/vi/${yt}/hqdefault.jpg" alt=""${styleAttr}>`
+    if (VIDEO_FILE_RE.test(b.src)) {
+      return `<video src="${escapeHtml(resolveSrc(b.src))}" controls playsinline preload="metadata"${styleAttr}></video>`
+    }
+    return `<img src="${escapeHtml(resolveSrc(b.src))}" alt="${escapeHtml(b.alt)}"${styleAttr}>`
+  }
+
+  // 貼上的整段文字剛好是一個影片網址 → 回傳要插入的那一行；不是就回 null
+  const mediaLine = (pasted) => {
+    const url = pasted.trim()
+    if (!/^https?:\/\/[^\s()]+$/.test(url)) return null
+    return youtubeId(url) || VIDEO_FILE_RE.test(url) ? `![](${url})` : null
+  }
+
   const renderMarkdown = (body, resolveSrc = (src) => src) => blocksOf(body).map((b) => {
     if (b.type === 'gap') return `<div class="gap" style="height:${b.n * 2.5}vw"></div>`
     if (b.type === 'note') return '<div class="note-block" hidden></div>'
@@ -1471,13 +1503,15 @@ const SimpptParser = (() => {
       const x = parseFloat(b.attrs && b.attrs.x)
       const y = parseFloat(b.attrs && b.attrs.y)
       const w = parseFloat(b.attrs && b.attrs.w)
+      const yt = youtubeId(b.src)
+      const ytAttr = yt ? ` data-yt="${yt}"` : ''
       if (Number.isFinite(x) && Number.isFinite(y)) {
         const width = Number.isFinite(w) ? w : 30
-        return `<figure class="img-abs" style="left:${x}%;top:${y}%;width:${width}%">`
-          + `<img src="${escapeHtml(resolveSrc(b.src))}" alt="${escapeHtml(b.alt)}"></figure>`
+        return `<figure class="img-abs"${ytAttr} style="left:${x}%;top:${y}%;width:${width}%">`
+          + `${mediaHtml(b, resolveSrc, '')}</figure>`
       }
       const sizeAttr = Number.isFinite(w) ? ` style="width:${w}vw"` : ''
-      return `<figure><img src="${escapeHtml(resolveSrc(b.src))}" alt="${escapeHtml(b.alt)}"${sizeAttr}></figure>`
+      return `<figure${ytAttr}>${mediaHtml(b, resolveSrc, sizeAttr)}</figure>`
     }
     const abs = textStyleAttr(b.attrs)
     if (b.type === 'h') return `<h${b.level}${abs}>${inline(escapeHtml(b.text))}</h${b.level}>`
@@ -1489,7 +1523,7 @@ const SimpptParser = (() => {
   }).join('')
 
   return {
-    parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE,
+    parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE, mediaLine,
     setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo, continueList, blockText, rewriteBlock,
   }
 })()
@@ -1957,6 +1991,18 @@ const SaveLogic = (() => {
     content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
     stageOverlay.innerHTML = ''
     for (const el of [...content.querySelectorAll('.img-abs, .txt-abs')]) stageOverlay.appendChild(el)
+    // 播放時 YouTube 的封面圖換成真的播放器（其他地方都只放封面，不然每張縮圖都載一個播放器）
+    for (const fig of [...content.querySelectorAll('figure[data-yt]'), ...stageOverlay.querySelectorAll('figure[data-yt]')]) {
+      const cover = fig.querySelector('img')
+      if (!cover) continue
+      const player = document.createElement('iframe')
+      player.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(fig.dataset.yt)
+      player.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'
+      player.allowFullscreen = true
+      player.title = 'YouTube 影片'
+      player.style.width = cover.style.width
+      cover.replaceWith(player)
+    }
     applyLayout(content, meta.layout)
     applyWidth(content, meta.width)
     appendCountdown(content, meta, true)
@@ -2925,7 +2971,7 @@ const SaveLogic = (() => {
   }
 
   const convertToAbs = (el, isImg, frameRect) => {
-    const rect = (isImg ? el.querySelector('img') : el).getBoundingClientRect()
+    const rect = (isImg ? el.querySelector(MEDIA_SELECTOR) : el).getBoundingClientRect()
     el.classList.add(isImg ? 'img-abs' : 'txt-abs')
     el.style.left = `${(((rect.left - frameRect.left) / frameRect.width) * 100).toFixed(1)}%`
     el.style.top = `${(((rect.top - frameRect.top) / frameRect.height) * 100).toFixed(1)}%`
@@ -2935,6 +2981,8 @@ const SaveLogic = (() => {
   }
 
   const BLOCK_SELECTOR = 'figure, h1, h2, h3, p, ul, ol'
+  // figure 裡面放的東西：圖片，或影片檔的播放器
+  const MEDIA_SELECTOR = 'img, video'
   const SNAP = 1.4
 
   edFrame.addEventListener('mousedown', (e) => {
@@ -2946,7 +2994,7 @@ const SaveLogic = (() => {
     const frameRect = edFrame.getBoundingClientRect()
     const isImg = el.tagName === 'FIGURE'
     const isAbs = el.classList.contains('img-abs') || el.classList.contains('txt-abs')
-    const flowImg = isImg && !isAbs ? el.querySelector('img') : null
+    const flowImg = isImg && !isAbs ? el.querySelector(MEDIA_SELECTOR) : null
     dragCtx = {
       el, k, frameRect, isImg, isAbs,
       additive: e.shiftKey || e.ctrlKey,
@@ -3095,7 +3143,7 @@ const SaveLogic = (() => {
       if (dragCtx.isImg) {
         const width = Math.max(3, dragCtx.w + dx).toFixed(1)
         if (dragCtx.isAbs) el.style.width = `${width}%`
-        else el.querySelector('img').style.width = `${width}vw`
+        else el.querySelector(MEDIA_SELECTOR).style.width = `${width}vw`
       } else {
         const s = Math.min(400, Math.max(20, dragCtx.s + dx * 2))
         el.style.setProperty('--ts', (s / 100).toFixed(3))
@@ -3153,7 +3201,7 @@ const SaveLogic = (() => {
     }
     if (mode === 'resize') {
       if (isImg) {
-        const img = el.querySelector('img')
+        const img = el.querySelector(MEDIA_SELECTOR)
         const width = parseFloat(el.style.width) || (img && parseFloat(img.style.width))
         if (Number.isFinite(width)) writeBlockAttrs(k, { w: width.toFixed(1) })
       } else {
@@ -3834,7 +3882,18 @@ const SaveLogic = (() => {
   edText.addEventListener('paste', async (e) => {
     const items = (e.clipboardData && e.clipboardData.items) || []
     const imageItem = [...items].find((item) => item.type.startsWith('image/'))
-    if (!imageItem) return
+    if (!imageItem) {
+      // 在空行貼上影片網址（YouTube 或 .mp4 之類）→ 直接變成一塊影片
+      const line = SimpptParser.mediaLine((e.clipboardData && e.clipboardData.getData('text/plain')) || '')
+      const at = edText.selectionStart
+      const before = edText.value.slice(edText.value.lastIndexOf('\n', at - 1) + 1, at)
+      const after = edText.value.slice(edText.selectionEnd).split('\n')[0]
+      if (!line || before.trim() !== '' || after.trim() !== '') return
+      e.preventDefault()
+      edText.setRangeText(line, at, edText.selectionEnd, 'end')
+      edText.dispatchEvent(new Event('input'))
+      return
+    }
     e.preventDefault()
     const file = imageItem.getAsFile()
     if (!file) return
@@ -4103,7 +4162,7 @@ const SaveLogic = (() => {
 
   stage.addEventListener('click', (e) => {
     if (drawMode) return
-    if (e.target.closest('a')) return
+    if (e.target.closest('a, video')) return
     if (e.target.closest('#exit-play')) return
     if (e.target.closest('#fs-toggle')) return
     if (e.clientX < window.innerWidth / 4) goTo(state.index - 1)

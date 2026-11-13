@@ -45,6 +45,13 @@
 - 改字期間 `blockEdit` 不是 null，全域快捷鍵都不作用
 - 圖片沒有字可改，雙擊維持「還原這一塊」
 
+## 影片
+
+- 沒有新語法：圖片那一行 `![](網址)` 的網址是 YouTube 或影片檔，`renderMarkdown` 就改放影片（`youtubeId`、`VIDEO_FILE_RE`、`mediaHtml`，有測試）。區塊型別仍是 `img`，所以拖曳、縮放、`{x= y= w=}` 全部沿用
+- YouTube 在 parser 只輸出封面圖加 `figure[data-yt]`；只有 `renderSlide`（播放）會把封面換成 iframe — 縮圖列和編輯器不載播放器
+- 影片檔的 `<video>` 在 `#stage` 以外 `pointer-events: none`，不然編輯器裡拖不動
+- 編輯器裡找 figure 內的東西用 `MEDIA_SELECTOR`，不要寫死 `img`
+
 ## 上一動／下一動
 
 - 邏輯是 `<script id="history-logic">` 的 `EditHistory`（純函式，有測試）：連續打字併成一步，其餘每次改動各一步，上限 200 步
