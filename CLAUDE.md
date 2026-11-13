@@ -44,6 +44,7 @@
 - 雙擊預覽的文字區塊會開 `#block-editor`（蓋在區塊上的 textarea，內容是 markdown 原文）。讀寫走 parser 的 `blockText`／`rewriteBlock`（純函式，有測試）：標記、編號、行尾 `{x= y=…}` 都保留，字清空就刪掉區塊
 - 改字期間 `blockEdit` 不是 null，全域快捷鍵都不作用
 - 圖片沒有字可改，雙擊維持「還原這一塊」
+- 預覽下方的「加文字」「加圖片」走 `addBlockToPage` → parser 的 `appendBlock`（純函式，有測試）：在這頁最後面加一行，回傳它是第幾塊；加文字接著直接開 `#block-editor`
 
 ## 影片
 

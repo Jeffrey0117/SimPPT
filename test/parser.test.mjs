@@ -565,6 +565,39 @@ test('mediaLine turns a pasted video link into an image line, and nothing else',
   assert.equal(mediaLine('https://x.test/a).mp4'), null)
 })
 
+test('appendBlock adds a block of its own at the end of the page and says which one it is', () => {
+  const { appendBlock } = SimpptParser
+  const kindAt = (out) => blocksOf(out.lines.join('\n'))[out.k].type
+
+  const afterText = appendBlock(['# A', '', 'text', ''], '文字')
+  assert.deepEqual(afterText.lines, ['# A', '', 'text', '', '文字', ''])
+  assert.equal(afterText.k, 2)
+  assert.equal(kindAt(afterText), 'p')
+
+  const afterList = appendBlock(['- a', '- b'], '文字')
+  assert.deepEqual(afterList.lines, ['- a', '- b', '', '文字'])
+  assert.equal(afterList.k, 1)
+  assert.equal(kindAt(afterList), 'p')
+
+  const image = appendBlock(['# A', '', ''], '![](https://x.test/a.png)')
+  assert.deepEqual(image.lines, ['# A', '', '![](https://x.test/a.png)', '', ''])
+  assert.equal(kindAt(image), 'img')
+
+  assert.deepEqual(appendBlock([], '文字'), { lines: ['文字'], k: 0 })
+  assert.deepEqual(appendBlock(['', ''], '文字'), { lines: ['文字', '', ''], k: 0 })
+})
+
+test('appendBlock leaves the blocks already on the page as they were', () => {
+  const { appendBlock } = SimpptParser
+  const body = ['# A {x=10 y=20}', '', '', '', 'para', 'more', '', 'note: hi', '1. one', '2. two']
+  const before = blocksOf(body.join('\n'))
+  const out = appendBlock(body, '文字')
+  const after = blocksOf(out.lines.join('\n'))
+  assert.deepEqual(after.slice(0, before.length), before)
+  assert.equal(after.length, before.length + 1)
+  assert.equal(out.k, before.length)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {
