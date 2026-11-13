@@ -535,6 +535,12 @@
   #keys-grid dt { font-size: var(--text-sm); color: var(--color-muted); }
   #keys-grid dd { display: inline-flex; gap: 3px; justify-content: flex-end; white-space: nowrap; }
   @media (max-width: 640px) { #keys-grid { grid-template-columns: minmax(0, 1fr); } }
+  /* 雙擊預覽上的文字 → 原地改字 */
+  #block-editor {
+    position: absolute; z-index: 9; margin: 0;
+    border: 0; outline: 2px solid var(--color-accent); border-radius: 4px;
+    resize: none; overflow: hidden; font-family: inherit;
+  }
   #ed-pagebar { display: flex; align-items: center; gap: var(--space-1); }
   /* 預覽區拿到鍵盤焦點（左右鍵換頁）時，投影片外框亮起來 */
   #ed-preview:focus { outline: none; }
@@ -1457,6 +1463,44 @@ const SimpptParser = (() => {
     return blocks
   }
 
+  // --- 在預覽上直接改字 ---
+  const TEXT_BLOCKS = ['h', 'p', 'ul', 'ol']
+
+  // 第 k 個區塊可以改的字：不含 #、-、1. 這些標記，也不含行尾的 {x= y= …}。
+  // 清單一點一行。不是文字區塊就回 null。
+  const blockText = (body, k) => {
+    const block = blocksOf(body)[k]
+    if (!block || !TEXT_BLOCKS.includes(block.type)) return null
+    if (block.type === 'h') return { kind: 'h', text: block.text }
+    if (block.type === 'p') return { kind: 'p', text: block.lines.join('\n') }
+    return { kind: block.type, text: block.items.join('\n') }
+  }
+
+  // 把第 k 個區塊的字換成 text，回傳新的那幾行（bodyLines 是那一頁的內容行）。
+  // 標記、編號、行尾的位置設定都保留；字清空了就把整個區塊拿掉。
+  const rewriteBlock = (bodyLines, k, text) => {
+    const block = blocksOf(bodyLines.join('\n'))[k]
+    if (!block || !TEXT_BLOCKS.includes(block.type)) return null
+    const count = block.type === 'h' ? 1 : (block.type === 'p' ? block.lines.length : block.items.length)
+    const first = bodyLines[block.start]
+    const tailMatch = first.match(ATTR_TAIL_RE)
+    const tail = tailMatch ? ' ' + tailMatch[0].trim() : ''
+    const parts = text.split('\n').map((part) => part.trim()).filter(Boolean)
+    const made = (() => {
+      if (parts.length === 0) return []
+      if (block.type === 'h') return [first.match(/^\s*#{1,3}\s+/)[0] + parts.join(' ')]
+      if (block.type === 'p') return parts
+      if (block.type === 'ul') {
+        const marker = first.trim().charAt(0)
+        return parts.map((part) => marker + ' ' + part)
+      }
+      const from = block.startNum || 1
+      return parts.map((part, i) => (from + i) + '. ' + part)
+    })()
+    const next = made.map((line, i) => (i === 0 ? line + tail : line))
+    return [...bodyLines.slice(0, block.start), ...next, ...bodyLines.slice(block.start + count)]
+  }
+
   const textStyleAttr = (attrs) => {
     if (!attrs) return ''
     const x = parseFloat(attrs.x)
@@ -1498,7 +1542,7 @@ const SimpptParser = (() => {
 
   return {
     parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE,
-    setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo, continueList,
+    setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo, continueList, blockText, rewriteBlock,
   }
 })()
 </script>
@@ -2972,11 +3016,112 @@ const SaveLogic = (() => {
     }
   })
 
+  // --- 雙擊預覽上的文字：原地改字 ---
+  // 輸入框蓋在那個區塊上，裡面是 markdown 原文（**粗體** 之類的記號照樣看得到）。
+
+  const BLOCK_EDIT_PAD = 6
+  const BLOCK_EDIT_MIN_W = 220
+  const blockEditor = document.createElement('textarea')
+  blockEditor.id = 'block-editor'
+  blockEditor.spellcheck = false
+  blockEditor.rows = 1 // 預設是兩行高，單行標題會多出一截空白
+  blockEditor.hidden = true
+  blockEditor.setAttribute('aria-label', '改這一段的字')
+  edPreviewBox.append(blockEditor)
+  // 正在改的區塊：{ k, el, kind }；沒有在改就是 null
+  let blockEdit = null
+
+  const slideBodyLines = () => {
+    const ctx = currentSlideLines()
+    return ctx ? { ctx, bodyLines: ctx.lines.slice(ctx.lead, ctx.range.end) } : null
+  }
+
+  const fitBlockEditor = () => {
+    blockEditor.style.height = 'auto'
+    blockEditor.style.height = blockEditor.scrollHeight + 'px'
+  }
+
+  const openBlockEditor = (el, k) => {
+    const found = slideBodyLines()
+    const source = found && SimpptParser.blockText(found.bodyLines.join('\n'), k)
+    if (!source) return false
+    deselectBlock()
+    const rect = el.getBoundingClientRect()
+    const host = edPreviewBox.getBoundingClientRect()
+    const look = getComputedStyle(el)
+    // 預覽是整張縮小的，量畫面上的寬度除以原始寬度就是縮小比例
+    const scale = el.offsetWidth > 0 ? rect.width / el.offsetWidth : 1
+    const fontPx = parseFloat(look.fontSize) || 16
+    const width = Math.max(rect.width + BLOCK_EDIT_PAD * 2, BLOCK_EDIT_MIN_W)
+    // 置中的字，輸入框也對著它的中線放，改字時字才不會往旁邊跳
+    const left = look.textAlign === 'center'
+      ? rect.left + rect.width / 2 - width / 2 - host.left
+      : rect.left - host.left - BLOCK_EDIT_PAD
+    Object.assign(blockEditor.style, {
+      left: Math.max(0, Math.min(left, host.width - width)) + 'px',
+      top: (rect.top - host.top - BLOCK_EDIT_PAD) + 'px',
+      width: Math.min(width, host.width) + 'px',
+      padding: BLOCK_EDIT_PAD + 'px',
+      fontSize: (fontPx * scale) + 'px',
+      fontWeight: look.fontWeight,
+      lineHeight: String((parseFloat(look.lineHeight) || fontPx * 1.5) / fontPx),
+      textAlign: look.textAlign === 'center' ? 'center' : 'left',
+      color: look.color,
+      background: getComputedStyle(edFrame).backgroundColor,
+    })
+    blockEdit = { k, el, kind: source.kind }
+    el.style.visibility = 'hidden'
+    blockEditor.value = source.text
+    blockEditor.hidden = false
+    fitBlockEditor()
+    blockEditor.focus()
+    blockEditor.select()
+    return true
+  }
+
+  // commit = true 把改的字寫回 markdown；false 就當沒這回事
+  const closeBlockEditor = (commit) => {
+    if (!blockEdit) return
+    const { k, el } = blockEdit
+    blockEdit = null
+    blockEditor.hidden = true
+    el.style.visibility = ''
+    if (!commit) return
+    const found = slideBodyLines()
+    if (!found) return
+    const { ctx, bodyLines } = found
+    const next = SimpptParser.rewriteBlock(bodyLines, k, blockEditor.value)
+    if (!next || next.join('\n') === bodyLines.join('\n')) return
+    setEditorText([...ctx.lines.slice(0, ctx.lead), ...next, ...ctx.lines.slice(ctx.range.end)])
+  }
+
+  blockEditor.addEventListener('input', fitBlockEditor)
+  blockEditor.addEventListener('blur', () => closeBlockEditor(true))
+  blockEditor.addEventListener('mousedown', (e) => e.stopPropagation())
+  blockEditor.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.isComposing) return
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      closeBlockEditor(false)
+      edPreviewBox.focus({ preventScroll: true })
+      return
+    }
+    // 標題只有一行，Enter 就是改好了；段落和清單 Enter 是換行，Ctrl+Enter 才是改好了
+    const done = e.key === 'Enter' && (blockEdit.kind === 'h' || e.ctrlKey || e.metaKey)
+    if (!done) return
+    e.preventDefault()
+    closeBlockEditor(true)
+    edPreviewBox.focus({ preventScroll: true })
+  })
+
   edFrame.addEventListener('dblclick', (e) => {
     const el = e.target.closest(BLOCK_SELECTOR)
     if (!el) return
     const k = previewBlocks.indexOf(el)
-    if (k >= 0) writeBlockAttrs(k, null)
+    if (k < 0) return
+    // 文字 → 改字；圖片沒有字可改，維持原本的「雙擊還原這一塊」
+    if (!openBlockEditor(el, k)) writeBlockAttrs(k, null)
   })
 
   edPreviewBox.addEventListener('mousedown', (e) => {
@@ -3487,7 +3632,7 @@ const SaveLogic = (() => {
 
   // 點預覽區就把鍵盤焦點帶過來，之後左右鍵是換頁，不是在左邊移動游標
   edPreviewBox.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button, input, a, .mini-tools')) return
+    if (e.target.closest('button, input, textarea, a, .mini-tools')) return
     edPreviewBox.focus({ preventScroll: true })
   })
 
@@ -3894,6 +4039,7 @@ const SaveLogic = (() => {
       ['粗體（會帶重點色）', ['Ctrl', 'B']],
       ['斜體', ['Ctrl', 'I']],
       ['清單自動接下一點', ['Enter']],
+      ['在預覽上改字', ['雙擊文字']],
       ['套用版型（依面板順序）', ['Alt', '1 – 8']],
     ] },
     { title: '播放中', rows: [
@@ -3969,7 +4115,7 @@ const SaveLogic = (() => {
 
   // Alt+數字：把目前這頁換成面板上第幾個版型
   document.addEventListener('keydown', (e) => {
-    if (editor.hidden || !e.altKey || e.ctrlKey || e.metaKey || dialogOpen()) return
+    if (editor.hidden || !e.altKey || e.ctrlKey || e.metaKey || dialogOpen() || blockEdit) return
     const n = /^Digit([1-9])$/.exec(e.code)
     const preset = n && LAYOUT_PRESETS[Number(n[1]) - 1]
     if (!preset) return
@@ -3984,6 +4130,8 @@ const SaveLogic = (() => {
       return
     }
     if (editor.hidden || !(e.ctrlKey || e.metaKey)) return
+    // 正在預覽上改字：Ctrl+Enter、Ctrl+Z 這些都交給那個輸入框
+    if (blockEdit) return
     if (e.code === 'Slash' || e.key === '/') {
       e.preventDefault()
       toggleKeysSheet()

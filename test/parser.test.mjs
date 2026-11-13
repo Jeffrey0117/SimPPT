@@ -467,6 +467,49 @@ test('continueList leaves everything else to the browser', () => {
   assert.equal(continueList('', 0), null)
 })
 
+const { blockText, rewriteBlock } = SimpptParser
+const BODY = ['# 你需要了解什麼? {x=5 y=10 s=120}', '', '第一行', '第二行', '', '- 什麼是 A?', '- 什麼是 B?', '', '3. 三', '4. 四', '', '![](a.png)']
+
+test('blockText gives the editable words of a block, without markers or position settings', () => {
+  const body = BODY.join('\n')
+  assert.deepEqual(blockText(body, 0), { kind: 'h', text: '你需要了解什麼?' })
+  assert.deepEqual(blockText(body, 1), { kind: 'p', text: '第一行\n第二行' })
+  assert.deepEqual(blockText(body, 2), { kind: 'ul', text: '什麼是 A?\n什麼是 B?' })
+  assert.deepEqual(blockText(body, 3), { kind: 'ol', text: '三\n四' })
+  assert.equal(blockText(body, 4), null)
+  assert.equal(blockText(body, 9), null)
+})
+
+test('rewriteBlock changes a heading and keeps its level and position', () => {
+  const out = rewriteBlock(BODY, 0, '新的標題')
+  assert.equal(out[0], '# 新的標題 {x=5 y=10 s=120}')
+  assert.deepEqual(out.slice(1), BODY.slice(1))
+  assert.equal(rewriteBlock(['## 小標'], 0, '改\n兩行')[0], '## 改 兩行')
+})
+
+test('rewriteBlock changes a paragraph, which may grow or shrink in lines', () => {
+  assert.deepEqual(rewriteBlock(BODY, 1, '只剩一行').slice(0, 5), [BODY[0], '', '只剩一行', '', '- 什麼是 A?'])
+  assert.deepEqual(rewriteBlock(['a {c=#f00}', 'b'], 0, 'x\ny\nz'), ['x {c=#f00}', 'y', 'z'])
+})
+
+test('rewriteBlock changes list items: one line each, markers and numbering kept', () => {
+  const ul = rewriteBlock(BODY, 2, '甲\n\n乙\n丙')
+  assert.deepEqual(ul.slice(5, 8), ['- 甲', '- 乙', '- 丙'])
+  const ol = rewriteBlock(BODY, 3, '只有一個')
+  assert.deepEqual(ol.slice(8, 10), ['3. 只有一個', ''])
+  assert.deepEqual(rewriteBlock(['* a {s=90}', '* b'], 0, 'c'), ['* c {s=90}'])
+})
+
+test('rewriteBlock with no words left removes the block; non-text blocks are left alone', () => {
+  assert.deepEqual(rewriteBlock(['# T', '', 'gone', '', 'stay'], 1, '  \n '), ['# T', '', '', 'stay'])
+  assert.equal(rewriteBlock(BODY, 4, 'x'), null)
+})
+
+test('what blockText gives back, rewriteBlock writes back unchanged', () => {
+  const body = BODY.join('\n')
+  for (let k = 0; k < 4; k += 1) assert.deepEqual(rewriteBlock(BODY, k, blockText(body, k).text), BODY)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {
