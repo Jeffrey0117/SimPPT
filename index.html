@@ -550,6 +550,8 @@
   .card-error { color: var(--color-danger); font-size: var(--text-sm); min-height: 1.4em; }
   .card-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
   .card-actions .btn { height: 38px; padding: 0 var(--space-4); }
+  #name-overwrite { margin-right: auto; padding: 0 var(--space-2); color: var(--color-danger); }
+  #name-overwrite:hover { color: var(--color-danger-ink); background: var(--color-danger); }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -649,6 +651,7 @@
     </div>
     <div id="name-error" class="card-error"></div>
     <div class="card-actions">
+      <button type="button" id="name-overwrite" class="btn btn-ghost" hidden>蓋掉原本那份</button>
       <button type="button" id="name-cancel" class="btn btn-ghost">取消</button>
       <button type="submit" id="name-submit" class="btn btn-primary">存檔</button>
     </div>
@@ -1180,6 +1183,7 @@ const SaveLogic = (() => {
   const nameInput = document.getElementById('name-input')
   const nameError = document.getElementById('name-error')
   const nameCancelBtn = document.getElementById('name-cancel')
+  const nameOverwriteBtn = document.getElementById('name-overwrite')
   const nameSubmitBtn = document.getElementById('name-submit')
   const landGrid = document.getElementById('land-grid')
   const landDecks = document.getElementById('land-decks')
@@ -2003,12 +2007,13 @@ const SaveLogic = (() => {
   }
 
   // 問檔名、存成 decks/ 裡的新檔。回傳存好的路徑；取消回傳 null。
-  // 撞名時留在對話框裡讓人改名，不會蓋掉原本那份。
+  // 撞名時留在對話框裡：改名，或自己按「蓋掉原本那份」— 不會沒問就蓋。
   const saveAsNewDeck = (text) => new Promise((resolve) => {
     nameInput.value = state.mdPath
       ? state.mdPath.split('/').pop().replace(MD_RE, '')
       : SaveLogic.suggestName(text)
     nameError.textContent = ''
+    nameOverwriteBtn.hidden = true
     nameModal.hidden = false
     nameInput.focus()
     nameInput.select()
@@ -2018,6 +2023,8 @@ const SaveLogic = (() => {
       nameModal.hidden = true
       nameCard.removeEventListener('submit', onSubmit)
       nameCancelBtn.removeEventListener('click', onCancel)
+      nameOverwriteBtn.removeEventListener('click', onOverwrite)
+      nameInput.removeEventListener('input', onInput)
       nameModal.removeEventListener('keydown', onKey)
       edText.focus()
       resolve(result)
@@ -2042,14 +2049,37 @@ const SaveLogic = (() => {
         if (!await serverCopyMatches(rel, text)) throw new Error('saved copy does not match')
         close(rel)
       } catch (err) {
-        nameError.textContent = err && err.code === 'EEXIST'
-          ? `已經有「${rel.split('/').pop()}」了，換個名字（原本那份不會被蓋掉）`
+        const clash = Boolean(err && err.code === 'EEXIST')
+        nameOverwriteBtn.hidden = !clash
+        nameError.textContent = clash
+          ? `已經有「${rel.split('/').pop()}」了。換個名字，或按左下角蓋掉原本那份。`
           : '存不進去，再試一次'
       } finally {
         nameSubmitBtn.disabled = false
       }
     }
+    // 使用者自己選的覆蓋：把這個名字的檔換成現在的內容
+    const onOverwrite = async () => {
+      const rel = SaveLogic.deckPathFor(nameInput.value)
+      if (!rel) return
+      nameOverwriteBtn.disabled = true
+      try {
+        await saveToServer(rel, text)
+        close(rel)
+      } catch (err) {
+        nameError.textContent = '存不進去，再試一次'
+      } finally {
+        nameOverwriteBtn.disabled = false
+      }
+    }
+    // 名字一改，剛才的撞名訊息就不適用了
+    const onInput = () => {
+      nameOverwriteBtn.hidden = true
+      nameError.textContent = ''
+    }
     nameCard.addEventListener('submit', onSubmit)
+    nameOverwriteBtn.addEventListener('click', onOverwrite)
+    nameInput.addEventListener('input', onInput)
     nameCancelBtn.addEventListener('click', onCancel)
     nameModal.addEventListener('keydown', onKey)
   })
@@ -3378,7 +3408,10 @@ const SaveLogic = (() => {
       }
       state.sourceText = s.text
       state.cleanText = s.dirty ? null : s.text
-      state.deckUrl = s.deckUrl || ''
+      // 舊版存的現場沒有 deckUrl 欄位；那時 mdPath 在 decks/ 底下就代表它是 server 上的那個檔
+      state.deckUrl = typeof s.deckUrl === 'string'
+        ? s.deckUrl
+        : (/^decks\//.test(state.mdPath) ? state.mdPath : '')
       state.deckBaseUrl = s.baseUrl || ''
       if (s.view === 'play') {
         state.index = s.index || 0
