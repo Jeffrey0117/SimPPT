@@ -598,6 +598,125 @@ test('appendBlock leaves the blocks already on the page as they were', () => {
   assert.equal(out.k, before.length)
 })
 
+// --- 插入幾頁／取代一頁（給 API、MCP、AI 插入用） ---
+
+const HOST = [
+  '---', 'bg: #111111', 'color: #eeeeee', '---', '',
+  '# 一', '',
+  '--- set bg=#222222 accent=#ff0000', '',
+  '# 二', '',
+  '--- layout=bullets', '',
+  '# 三', '', '- a', '- b', '',
+  '--- bg=#333333', '',
+  '# 四',
+].join('\n')
+
+const pageLooks = (text) => parse(text, { keepEmpty: true }).slides.map((s) => ({ meta: s.meta, body: s.body }))
+
+test('insertSlidesAfter puts the new pages after the given page and leaves the others as they were', () => {
+  const { insertSlidesAfter } = SimpptParser
+  const before = pageLooks(HOST)
+  const out = insertSlidesAfter(HOST, 1, '# 新 A\n\n---\n\n# 新 B')
+  const after = pageLooks(out.text)
+  assert.equal(out.index, 2)
+  assert.equal(out.count, 2)
+  assert.equal(after.length, before.length + 2)
+  assert.deepEqual(after.slice(0, 2), before.slice(0, 2))
+  assert.deepEqual(after.slice(4), before.slice(2))
+  assert.deepEqual(after.slice(2, 4).map((s) => s.body), ['# 新 A', '# 新 B'])
+})
+
+test('insertSlidesAfter: new pages take the look in force where they land', () => {
+  const { insertSlidesAfter } = SimpptParser
+  const mid = pageLooks(insertSlidesAfter(HOST, 1, '# 新').text)[2]
+  assert.deepEqual(mid.meta, { bg: '#222222', accent: '#ff0000' })
+  const front = pageLooks(insertSlidesAfter(HOST, -1, '# 新').text)
+  assert.deepEqual(front[0], { meta: {}, body: '# 新' })
+  assert.deepEqual(front.slice(1), pageLooks(HOST))
+})
+
+test('insertSlidesAfter at the end, and past the end, appends', () => {
+  const { insertSlidesAfter } = SimpptParser
+  const out = insertSlidesAfter(HOST, 99, '# 尾')
+  const after = pageLooks(out.text)
+  assert.equal(out.index, 4)
+  assert.equal(after[4].body, '# 尾')
+  // 第四頁的 bg 只屬於它自己，新頁回到沿用的那一組
+  assert.deepEqual(after[4].meta, { bg: '#222222', accent: '#ff0000' })
+  assert.deepEqual(after.slice(0, 4), pageLooks(HOST))
+})
+
+test('insertSlidesAfter: front matter and "set" in the snippet never reach the pages after it', () => {
+  const { insertSlidesAfter } = SimpptParser
+  const snippet = ['---', 'bg: #abcdef', '---', '', '--- set bg=#00ff00 layout=big', '', '# 87%', '', '--- set color=#0000ff', '', '# 再一頁'].join('\n')
+  const out = insertSlidesAfter(HOST, 0, snippet)
+  const after = pageLooks(out.text)
+  assert.equal(out.count, 2)
+  assert.deepEqual(after[1].meta, { bg: '#00ff00', layout: 'big' })
+  assert.deepEqual(after[2].meta, { color: '#0000ff' })
+  assert.deepEqual(after.slice(3), pageLooks(HOST).slice(1))
+  assert.ok(!out.text.includes('#abcdef'))
+})
+
+test('a page that is only a code block survives being put in or put back', () => {
+  const { insertSlidesAfter, replaceSlide } = SimpptParser
+  const code = '```python\n# comment\nprint(1)\n```'
+  assert.equal(pageLooks(insertSlidesAfter(HOST, 0, code).text)[1].body, code)
+  assert.equal(pageLooks(replaceSlide(HOST, 1, code).text)[1].body, code)
+})
+
+test('insertSlidesAfter drops blank pages', () => {
+  const { insertSlidesAfter } = SimpptParser
+  const out = insertSlidesAfter(HOST, 0, '---\n\n# 只有這頁\n\n---\n\n---\n')
+  assert.equal(out.count, 1)
+  assert.equal(pageLooks(out.text)[1].body, '# 只有這頁')
+  const none = insertSlidesAfter(HOST, 0, '\n\n---\n\n')
+  assert.equal(none.count, 0)
+  assert.equal(none.text, HOST)
+})
+
+test('insertSlidesAfter into an empty deck leaves no blank first page', () => {
+  const { insertSlidesAfter } = SimpptParser
+  const out = insertSlidesAfter('', 0, '# A\n\n---\n\n# B')
+  assert.deepEqual(pageLooks(out.text).map((s) => s.body), ['# A', '# B'])
+  assert.equal(out.index, 0)
+})
+
+test('replaceSlide swaps the content and keeps the page settings', () => {
+  const { replaceSlide } = SimpptParser
+  const out = replaceSlide(HOST, 2, '# 新三\n\n- x')
+  const after = pageLooks(out.text)
+  assert.equal(out.count, 1)
+  assert.equal(after[2].body, '# 新三\n\n- x')
+  assert.equal(after[2].meta.layout, 'bullets')
+  assert.deepEqual([after[0], after[1], after[3]], [pageLooks(HOST)[0], pageLooks(HOST)[1], pageLooks(HOST)[3]])
+})
+
+test('replaceSlide: settings in the snippet override the same ones, and later pages keep their look', () => {
+  const { replaceSlide } = SimpptParser
+  const out = replaceSlide(HOST, 1, '--- bg=#999999 layout=top\n\n# 新二')
+  const after = pageLooks(out.text)
+  assert.deepEqual(after[1].meta, { bg: '#999999', accent: '#ff0000', layout: 'top' })
+  assert.equal(after[1].body, '# 新二')
+  assert.deepEqual(after.slice(2), pageLooks(HOST).slice(2))
+})
+
+test('replaceSlide with several pages puts the rest right after', () => {
+  const { replaceSlide } = SimpptParser
+  const out = replaceSlide(HOST, 0, '# 甲\n\n---\n\n# 乙')
+  const after = pageLooks(out.text)
+  assert.equal(out.count, 2)
+  assert.deepEqual(after.slice(0, 2).map((s) => s.body), ['# 甲', '# 乙'])
+  assert.deepEqual(after.slice(2), pageLooks(HOST).slice(1))
+})
+
+test('replaceSlide leaves the text alone for a missing page or an empty snippet', () => {
+  const { replaceSlide } = SimpptParser
+  assert.equal(replaceSlide(HOST, 9, '# x').text, HOST)
+  assert.equal(replaceSlide(HOST, 0, '  ').text, HOST)
+  assert.equal(replaceSlide(HOST, 0, '  ').count, 0)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

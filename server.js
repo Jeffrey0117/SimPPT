@@ -2,9 +2,11 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildGeneratePrompt, buildRevisePrompt } from './lib/generate-prompt.mjs'
+import { buildGeneratePrompt, buildRevisePrompt, buildInsertPrompt, stripFence } from './lib/generate-prompt.mjs'
 import { runClaudePrint } from './lib/run-claude.mjs'
-import { writeDeck, listDecks } from './lib/deck-store.mjs'
+import { writeDeck, listDecks, insideRoot } from './lib/deck-store.mjs'
+import { handleApi } from './lib/api-routes.mjs'
+import { sameSite } from './lib/same-site.mjs'
 
 // Why a save was refused, as an HTTP status the editor can tell apart.
 const SAVE_ERROR_STATUS = { EFORBIDDEN: 403, EEXIST: 409, ECHANGED: 409, EVERIFY: 500 }
@@ -19,6 +21,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.markdown': 'text/markdown; charset=utf-8',
+  '.simppt': 'text/markdown; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -39,7 +42,14 @@ const server = http.createServer((req, res) => {
       res.end('Not found')
       return
     }
-    if (req.method === 'POST' && (urlPath === '/__upload' || urlPath === '/__save' || urlPath === '/__generate' || urlPath === '/__revise') && !authorized(req)) {
+    // The endpoints that read or change decks, or run claude: only for this site's own pages.
+    if ((urlPath.startsWith('/api/') || urlPath.startsWith('/__')) && !sameSite(req, { hasToken: Boolean(TOKEN) })) {
+      res.writeHead(403, { 'Content-Type': 'application/json' })
+      res.end('{"ok":false,"code":"EFORBIDDEN","message":"forbidden"}')
+      return
+    }
+    if (handleApi(req, res, new URL(req.url, 'http://localhost'), { root: ROOT, authorized })) return
+    if (req.method === 'POST' && (urlPath === '/__insert' || urlPath === '/__upload' || urlPath === '/__save' || urlPath === '/__generate' || urlPath === '/__revise') && !authorized(req)) {
       res.writeHead(401, { 'Content-Type': 'application/json' })
       res.end('{"status":"error","message":"unauthorized"}')
       return
@@ -155,9 +165,52 @@ const server = http.createServer((req, res) => {
       })
       return
     }
+    if (req.method === 'POST' && urlPath === '/__insert') {
+      const chunks = []
+      req.on('data', (chunk) => chunks.push(chunk))
+      req.on('end', async () => {
+        const body = Buffer.concat(chunks).toString('utf8')
+        if (Buffer.byteLength(body, 'utf8') > 300 * 1024) {
+          res.writeHead(413, { 'Content-Type': 'application/json' })
+          res.end('{"ok":false,"message":"內容過大（上限 300KB）"}')
+          return
+        }
+        let markdown
+        let instruction
+        let after
+        if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end('{"ok":false,"message":"請求格式錯誤"}')
+          return
+        }
+        try {
+          ({ markdown, instruction, after } = JSON.parse(body))
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end('{"ok":false,"message":"請求格式錯誤"}')
+          return
+        }
+        if (typeof markdown !== 'string' || typeof instruction !== 'string' || !instruction.trim() || !Number.isInteger(after) || after < 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end('{"ok":false,"message":"缺少 markdown、instruction 或 after"}')
+          return
+        }
+        // The editor puts the pages in itself (and can undo it); nothing is written here.
+        const result = await runClaudePrint(buildInsertPrompt(markdown, after, instruction), { cwd: ROOT })
+        if (!result.ok) {
+          res.writeHead(result.status, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, message: result.message }))
+          return
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, markdown: stripFence(result.markdown) }))
+      })
+      return
+    }
     const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '')
     const full = path.resolve(ROOT, rel)
-    if (!full.startsWith(ROOT + path.sep)) {
+    // insideRoot looks at where the file really is: "/GIT~1/config" is .git/config on Windows.
+    if (!full.startsWith(ROOT + path.sep) || !insideRoot(ROOT, full)) {
       res.writeHead(403)
       res.end('Forbidden')
       return

@@ -1,6 +1,6 @@
 # SimPPT
 
-零依賴單檔 Markdown 簡報工具。核心全在 `index.html`（parser 在 `<script id="simppt-parser">`，可被 node 測試抽取）；`server.js` 是選配的本機/線上 server（靜態 + `/__save` 寫檔 + `/__upload` 圖床代理）。
+零依賴單檔 Markdown 簡報工具。核心全在 `index.html`（parser 在 `<script id="simppt-parser">`，可被 node 測試抽取）；`server.js` 是選配的本機/線上 server（靜態 + `/__save` 寫檔 + `/__upload` 圖床代理 + `/api/...` 逐頁操作）。簡報檔是 `.simppt`（內容就是 Markdown；舊的 `.md` 照樣認）。
 
 ## 開發
 
@@ -20,6 +20,28 @@
 - 前端 `saveDeck`：已知來源（`state.deckUrl`／檔案 handle／資料夾 handle）才覆寫；其餘一律走 `saveAsNewDeck`（問檔名、`create: true`），所以沒開過的檔不會被悄悄蓋掉
 - 存完會把檔案再抓回來跟編輯器內容比對，一樣才顯示「已存檔」。狀態由 `SaveLogic.fileState` 決定，畫在右上角 `#ed-file`
 - `GET /__decks` 列出 `decks/*.md`（跟 `/__save` 同一個 token 檢查）；前端用它判斷這個 server 能不能存（`hasDeckServer`）
+
+## 逐頁 API／SDK／MCP
+
+- parser 只有 `index.html` 那一份；node 這邊用 `lib/parser.mjs` 把它抽出來，不要另外抄一份
+- `lib/deck-api.mjs` 是核心（頁碼從 1 算、空白頁也算、錯誤帶 `code`）。`lib/api-routes.mjs`（`/api/...`）和 `mcp/`（stdio，零依賴）都只是包它一層 — 新增操作先加在核心，再接到兩邊，README 的表也要補
+- 從外面放進來的頁走 parser 的 `insertSlidesAfter`／`replaceSlide`：snippet 的 frontmatter 丟掉、`set` 拿掉、沒寫顏色就沿用落點的配色，所以不會動到其他頁。AI 插入（`/__insert`）也是走這條
+- 寫檔走 `editDeck`（帶 `expect`，檔案中途被別人改過就失敗，不會蓋掉；CRLF 的檔保持 CRLF）。讀與寫都回 `version`，寫入帶回 `version` 就會檢查簡報還是不是當初讀的那一版 — 頁碼只對讀到的那一版有意義
+- `findDeck`：有斜線的就是「那個檔」，而且只收 `decks/` 底下的；沒斜線才用名字比對。專案裡其他 `.md`（README、CLAUDE.md）不是簡報，不能從這裡改
+- AI 回答外面包的 ``` 只在 `/__insert` 剝（`stripFence`），parser 不剝 — 不然內容就是一段程式碼的頁，讀出來再寫回去會壞掉
+
+## 誰可以打 server（別改鬆）
+
+- 檔案路徑一律用 `lib/deck-store.mjs` 的 `insideRoot` 判斷，它看的是檔案在硬碟上真正的位置。只檢查網址或字串裡有沒有「.」開頭是不夠的：Windows 上 `.git` 也叫 `GIT~1`，2026-11-14 之前 `/GIT~1/config` 拿得到 git 設定
+- `/api/...` 和 `/__...` 先過 `lib/same-site.mjs` 的 `sameSite`：別的網站的網頁打不進來（Origin 要等於 Host）；沒設 token 時只認本機名稱（擋把網域指到 127.0.0.1 的手法）
+- 寫入要 `Content-Type: application/json` — 別的網站沒辦法不經瀏覽器詢問就送這種請求
+- 這三件事在 `test/server.test.mjs`、`test/deck-api.test.mjs` 有測試，而且確認過把修補拿掉測試會紅
+- 簡報檔的副檔名在三個地方：`lib/deck-store.mjs` 的 `DECK_RE`、`index.html` 的 `MD_RE`、`SaveLogic.deckPathFor`。新檔預設 `.simppt`，名字打 `.md` 就照存 `.md`
+
+## 檔案在別處被改了
+
+- `checkServerDeck` 每 2 秒抓一次開著的那份（只管 `state.deckUrl`），要怎麼做由 `SaveLogic.remoteChange` 決定（純函式，有測試）：沒有未存的修改就 `loadRemoteVersion`，有就只提示
+- 有未存的修改時絕不自動換內容。存檔中、對話框開著、正在預覽上改字時跳過那一輪；抓回來時發現這段期間存過檔，那份回應就丟掉（不然會把自己剛存的當成外部新版）
 
 ## 介面
 

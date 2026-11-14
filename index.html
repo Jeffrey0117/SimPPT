@@ -746,14 +746,14 @@
       <h1>SimPPT</h1>
       <p class="hint">
         「開啟檔案／資料夾」會進<strong>編輯器</strong>（左寫右預覽）；<br>
-        拖入 .md 或資料夾則<strong>直接播放</strong>。
+        拖入簡報檔（.simppt、.md）或資料夾則<strong>直接播放</strong>。
       </p>
     </header>
     <div class="land-grid solo" id="land-grid">
       <section class="land-actions">
         <button id="new-deck" class="btn btn-primary"><svg class="ic"><use href="#i-file-plus"/></svg>新簡報</button>
         <div class="act-list">
-          <button id="open-file" class="act"><svg class="ic"><use href="#i-file"/></svg>開啟檔案<small>.md</small></button>
+          <button id="open-file" class="act"><svg class="ic"><use href="#i-file"/></svg>開啟檔案<small>.simppt .md</small></button>
           <button id="open-dir" class="act"><svg class="ic"><use href="#i-folder"/></svg>開啟資料夾<small>含圖片</small></button>
           <button id="open-history" class="act" title="編輯內容每分鐘自動備份，最多 20 份；點一次載入最新，再點往回翻"><svg class="ic"><use href="#i-history"/></svg>歷史備份<small>最多 20 份</small></button>
           <button id="open-sample" class="act"><svg class="ic"><use href="#i-eye"/></svg>看範例</button>
@@ -796,7 +796,7 @@
     <div id="name-row">
       <span>decks/</span>
       <input id="name-input" class="field" type="text" autocomplete="off" spellcheck="false" aria-label="檔名">
-      <span>.md</span>
+      <span>.simppt</span>
     </div>
     <div id="name-error" class="card-error"></div>
     <div class="card-actions">
@@ -899,6 +899,7 @@
         <button id="ed-page-more" class="btn btn-ghost btn-icon" title="這一頁的操作（也可以在縮圖上按右鍵）" aria-label="這一頁的操作"><svg class="ic"><use href="#i-more"/></svg></button>
         <button id="ed-add-text" class="btn btn-ghost" title="在這一頁加一段文字"><svg class="ic"><use href="#i-type"/></svg><span class="lbl">加文字</span></button>
         <button id="ed-add-image" class="btn btn-ghost" title="在這一頁加一張圖片（從電腦選）"><svg class="ic"><use href="#i-image"/></svg><span class="lbl">加圖片</span></button>
+        <button id="ed-ai-insert" class="btn btn-ghost" title="說一句話，讓 AI 在這一頁後面加幾頁（本機 claude）"><svg class="ic"><use href="#i-message"/></svg><span class="lbl">AI 插入</span></button>
       </div>
       <button id="ed-keys" class="btn btn-ghost" title="看所有快捷鍵">快捷鍵<kbd>Ctrl</kbd><kbd>/</kbd></button>
     </div>
@@ -958,7 +959,7 @@
 </div>
 
 <div id="toast" hidden></div>
-<input id="file-input" type="file" accept=".md,.markdown,.txt" hidden>
+<input id="file-input" type="file" accept=".simppt,.md,.markdown,.txt" hidden>
 
 <script type="text/markdown" id="sample-deck">
 ---
@@ -1303,6 +1304,60 @@ const SimpptParser = (() => {
   // 把第 index 頁往前（delta = -1）或往後（+1）移一格。到頭了就不動。
   const moveSlide = (text, index, delta) => moveSlideTo(text, index, index + delta)
 
+  // --- 從外面放進幾頁（API、MCP、AI 插入）---
+  // snippet 是一小段簡報：--- 分頁，分隔線可以帶 layout= 之類的設定。
+  // 新頁不能動到後面的頁：snippet 的 frontmatter 丟掉、set 拿掉；沒寫顏色就沿用落點當下的配色。
+
+  // 到第 index 頁為止，一路 set 下來、後面的頁會沿用的設定
+  const carriedAt = (slides, index) =>
+    slides.slice(0, index + 1).reduce(
+      (acc, sl) => (sl.sticky ? { ...acc, ...carriedOn(Object.fromEntries(sl.kv)) } : acc),
+      {},
+    )
+
+  const hasContent = (sl) => sl.lines.some((line) => line.trim() !== '')
+
+  const snippetSlides = (snippet, carried) =>
+    readPages(String(snippet || '')).slides.filter(hasContent).map((sl) => ({
+      raw: null, sticky: false, bare: sl.bare, kv: sl.kv, lines: sl.lines,
+      want: { ...carried, ...Object.fromEntries(sl.kv) },
+    }))
+
+  // 在第 index 頁後面放進 snippet 的每一頁（index = -1 放最前面）。
+  // 回傳 { text, index: 第一張新頁, count: 放進幾頁 }；snippet 沒有內容就原樣回傳。
+  const insertSlidesAfter = (text, index, snippet) => {
+    const { head, globals, slides } = readPages(text)
+    const blankDeck = slides.length === 1 && !hasContent(slides[0]) && slides[0].raw === null
+    const at = blankDeck ? -1 : Math.max(-1, Math.min(index, slides.length - 1))
+    const added = snippetSlides(snippet, carriedAt(slides, at))
+    if (added.length === 0) return { text, index: Math.max(at, 0), count: 0 }
+    const next = blankDeck ? added : [...slides.slice(0, at + 1), ...added, ...slides.slice(at + 1)]
+    return { text: writePages(head, globals, next), index: at + 1, count: added.length }
+  }
+
+  // 把第 index 頁的內容換成 snippet。snippet 的第一頁沒寫設定就保留原本的分隔線，
+  // 有寫就蓋掉同名的設定；snippet 有好幾頁時，其餘接在後面。
+  const replaceSlide = (text, index, snippet) => {
+    const { head, globals, slides } = readPages(text)
+    const old = slides[index]
+    const made = old ? snippetSlides(snippet, carriedAt(slides, index)) : []
+    if (made.length === 0) return { text, index, count: 0 }
+    const [first, ...rest] = made
+    const given = new Set(first.kv.map(([key]) => key))
+    const replaced = first.kv.length + first.bare.length > 0
+      ? {
+        ...old,
+        raw: null,
+        bare: [...new Set([...old.bare, ...first.bare])],
+        kv: [...old.kv.filter(([key]) => !given.has(key)), ...first.kv],
+        lines: first.lines,
+        want: { ...old.want, ...Object.fromEntries(first.kv) },
+      }
+      : { ...old, lines: first.lines }
+    const next = [...slides.slice(0, index), replaced, ...rest, ...slides.slice(index + 1)]
+    return { text: writePages(head, globals, next), index, count: made.length }
+  }
+
   // 在清單裡按 Enter：接著開下一點（編號自動加一）；在空的那一點按 Enter 則結束清單。
   // pos = 游標位置。不是清單、或游標還在標記裡面，就回 null 交給瀏覽器照常換行。
   const continueList = (text, pos) => {
@@ -1539,6 +1594,7 @@ const SimpptParser = (() => {
   return {
     parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE, mediaLine, appendBlock,
     setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo, continueList, blockText, rewriteBlock,
+    insertSlidesAfter, replaceSlide,
   }
 })()
 </script>
@@ -1644,10 +1700,25 @@ const SaveLogic = (() => {
   }
 
   // What the user typed as a name -> a path inside decks/, or null when nothing usable was typed.
+  // A new deck gets the deck's own extension; a name typed with .md keeps .md.
   const deckPathFor = (typed) => {
     const last = String(typed || '').split(/[\\/]/).pop().trim()
-    const base = cleanName(last.replace(/\.(md|markdown)$/i, ''))
-    return base ? `decks/${base}.md` : null
+    const ext = /\.(md|markdown)$/i.test(last) ? '.md' : '.simppt'
+    const base = cleanName(last.replace(/\.(md|markdown|simppt)$/i, ''))
+    return base ? `decks/${base}${ext}` : null
+  }
+
+  // The file changed somewhere else (an AI through the API, another editor). What to do about it:
+  // 'load' the new text, 'offer' it (the editor has unsaved changes), or 'none'.
+  // remote = what the file holds now; clean = what the editor believes the file holds;
+  // seen = a remote text that was already offered, so the same one is not offered twice.
+  // asked = when this copy of the file was asked for; wrote = when the editor last saved.
+  // A copy asked for before our own save is older than what we just wrote — not news.
+  const remoteChange = ({ remote, clean, dirty = false, seen = null, asked = 0, wrote = 0 }) => {
+    if (wrote > 0 && wrote >= asked) return 'none'
+    if (typeof remote !== 'string' || typeof clean !== 'string' || sameText(remote, clean)) return 'none'
+    if (!dirty) return 'load'
+    return sameText(remote, seen) ? 'none' : 'offer'
   }
 
   // The one word that says where this deck stands. `hasTarget` = it has a file to be saved to.
@@ -1664,7 +1735,7 @@ const SaveLogic = (() => {
     typeof a === 'string' && typeof b === 'string'
     && a.replace(/\r\n?/g, '\n') === b.replace(/\r\n?/g, '\n')
 
-  return { suggestName, deckPathFor, fileState, sameText }
+  return { suggestName, deckPathFor, fileState, sameText, remoteChange }
 })()
 </script>
 
@@ -1731,7 +1802,8 @@ const SaveLogic = (() => {
   let findMatches = []
   let findCurrent = 0
 
-  const MD_RE = /\.(md|markdown)$/i
+  // 簡報檔：.simppt 是自己的副檔名，內容跟 .md 一樣
+  const MD_RE = /\.(md|markdown|simppt)$/i
   const DEFAULT_BG = '#101014'
   const DEFAULT_COLOR = '#f5f5f5'
 
@@ -2255,7 +2327,7 @@ const SaveLogic = (() => {
     }
     try {
       const [handle] = await window.showOpenFilePicker({
-        types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'] } }],
+        types: [{ description: 'SimPPT 簡報', accept: { 'text/markdown': ['.simppt', '.md', '.markdown'] } }],
       })
       const file = await handle.getFile()
       stopPolling()
@@ -2650,7 +2722,7 @@ const SaveLogic = (() => {
     const a = document.createElement('a')
     const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }))
     a.href = url
-    a.download = (state.mdPath || '簡報.md').split('/').pop()
+    a.download = (state.mdPath || '簡報.simppt').split('/').pop()
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 5000)
   }
@@ -2814,8 +2886,8 @@ const SaveLogic = (() => {
         document.title = `SimPPT — ${rel.split('/').pop()}`
       } else if (window.showSaveFilePicker) {
         const handle = await window.showSaveFilePicker({
-          suggestedName: (state.mdPath || `${SaveLogic.suggestName(text)}.md`).split('/').pop(),
-          types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+          suggestedName: (state.mdPath || `${SaveLogic.suggestName(text)}.simppt`).split('/').pop(),
+          types: [{ description: 'SimPPT 簡報', accept: { 'text/markdown': ['.simppt', '.md'] } }],
         })
         state.fileHandle = handle
         state.mdPath = handle.name
@@ -2831,6 +2903,7 @@ const SaveLogic = (() => {
       downloadMd(text)
     } finally {
       if (saved) {
+        lastLocalWrite = Date.now()
         state.sourceText = text
         state.cleanText = text
         edDirty = edText.value !== text
@@ -3718,11 +3791,24 @@ const SaveLogic = (() => {
     enterEditor(NEW_DECK_TEMPLATE)
   })
 
+  // 同一個對話框的三種用法：整份生成、整份調整、在這頁後面插入幾頁
+  const GEN_MODES = {
+    create: { title: 'AI 生成簡報', placeholder: '貼上你想做成簡報的內容…', submit: '生成', busy: 'AI 生成中…', empty: '請先貼一些內容' },
+    revise: { title: 'AI 編輯簡報', placeholder: '跟 AI 說要怎麼調整這份簡報…', submit: '送出', busy: 'AI 調整中…', empty: '請先輸入修改指令' },
+    insert: { title: 'AI 插入幾頁', placeholder: '一句話就好，例如：講番茄鐘工作法，3 張以內', submit: '插入', busy: 'AI 寫稿中…', empty: '請先說要加什麼' },
+  }
+  const edAiInsertBtn = document.getElementById('ed-ai-insert')
+  // 「AI 插入」按下去那一刻所在的頁；新頁接在它後面
+  let genInsertAfter = 0
+
   const openGenModal = (mode) => {
     genMode = mode
-    genTitle.textContent = mode === 'revise' ? 'AI 編輯簡報' : 'AI 生成簡報'
-    genText.placeholder = mode === 'revise' ? '跟 AI 說要怎麼調整這份簡報…' : '貼上你想做成簡報的內容…'
-    genSubmitBtn.textContent = mode === 'revise' ? '送出' : '生成'
+    genInsertAfter = previewIdx
+    genTitle.textContent = mode === 'insert'
+      ? `${GEN_MODES.insert.title}（接在第 ${genInsertAfter + 1} 頁後面）`
+      : GEN_MODES[mode].title
+    genText.placeholder = GEN_MODES[mode].placeholder
+    genSubmitBtn.textContent = GEN_MODES[mode].submit
     genText.value = ''
     genError.textContent = ''
     genModal.hidden = false
@@ -3731,36 +3817,68 @@ const SaveLogic = (() => {
 
   aiGenerateBtn.addEventListener('click', () => openGenModal('create'))
   edAiReviseBtn.addEventListener('click', () => openGenModal('revise'))
+  edAiInsertBtn.addEventListener('click', () => openGenModal('insert'))
 
   genCancelBtn.addEventListener('click', () => {
     genModal.hidden = true
   })
 
+  // 插入只要一句話：Enter 直接送出（Shift+Enter 換行）。另外兩種是貼長文，Enter 照常換行。
+  genText.addEventListener('keydown', (e) => {
+    if (genMode !== 'insert' || e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.isComposing) return
+    e.preventDefault()
+    if (!genSubmitBtn.disabled) genSubmitBtn.click()
+  })
+
+  const GEN_REQUESTS = {
+    create: (content) => ({
+      url: '/__generate',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      body: content,
+    }),
+    revise: (content) => ({
+      url: '/__revise',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown: edText.value, instruction: content }),
+    }),
+    insert: (content) => ({
+      url: '/__insert',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown: edText.value, after: genInsertAfter + 1, instruction: content }),
+    }),
+  }
+
   genSubmitBtn.addEventListener('click', async () => {
     const content = genText.value.trim()
     if (!content) {
-      genError.textContent = genMode === 'revise' ? '請先輸入修改指令' : '請先貼一些內容'
+      genError.textContent = GEN_MODES[genMode].empty
       return
     }
     genSubmitBtn.disabled = true
     genCancelBtn.disabled = true
-    genSubmitBtn.textContent = genMode === 'revise' ? 'AI 調整中…' : 'AI 生成中…'
+    genSubmitBtn.textContent = GEN_MODES[genMode].busy
     genError.textContent = ''
     try {
-      const res = genMode === 'revise'
-        ? await fetch('/__revise', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...apiHeaders() },
-            body: JSON.stringify({ markdown: edText.value, instruction: content }),
-          })
-        : await fetch('/__generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain; charset=utf-8', ...apiHeaders() },
-            body: content,
-          })
+      const request = GEN_REQUESTS[genMode](content)
+      const res = await fetch(request.url, {
+        method: 'POST',
+        headers: { ...request.headers, ...apiHeaders() },
+        body: request.body,
+      })
       const data = await res.json()
       if (!res.ok || !data.ok) {
         genError.textContent = data.message || `失敗（${res.status}）`
+        return
+      }
+      if (genMode === 'insert') {
+        const before = { text: edText.value, index: previewIdx }
+        const out = SimpptParser.insertSlidesAfter(before.text, genInsertAfter, data.markdown)
+        if (out.count === 0) {
+          genError.textContent = 'AI 沒有寫出任何一頁，換個說法再試一次'
+          return
+        }
+        genModal.hidden = true
+        commitPageOp(before, out, `AI 加了 ${out.count} 頁`)
         return
       }
       genModal.hidden = true
@@ -3778,8 +3896,76 @@ const SaveLogic = (() => {
     } finally {
       genSubmitBtn.disabled = false
       genCancelBtn.disabled = false
-      genSubmitBtn.textContent = genMode === 'revise' ? '送出' : '生成'
+      genSubmitBtn.textContent = GEN_MODES[genMode].submit
     }
+  })
+
+  // --- 檔案在別處被改了（AI 透過 API／MCP 改的、另一個編輯器存的）---
+  // 只看 server 上的簡報。沒有未存的修改就直接跟上；有的話只提示，按了才換。
+
+  const WATCH_MS = 2000
+  let remoteSeen = null
+  let remoteChecking = false
+  // 編輯器最後一次把內容寫進檔案的時間（enterEditor 不會把它歸零）
+  let lastLocalWrite = 0
+
+  const loadRemoteVersion = (text, label) => {
+    state.cleanText = text
+    state.sourceText = text
+    remoteSeen = null
+    replaceEditorText(text)
+    edDirty = false
+    offerUndo(label)
+    refreshFileChip()
+  }
+
+  const offerRemoteVersion = (text) => {
+    remoteSeen = text
+    edStatus.textContent = '檔案在別處有新版'
+    edStatus.classList.remove('ok')
+    edStatus.classList.add('has-action')
+    const load = document.createElement('button')
+    load.type = 'button'
+    load.dataset.remote = '1'
+    load.textContent = '載入新版'
+    load.title = '換成檔案裡的新版；你現在的內容按「上一動」拿得回來'
+    load.addEventListener('click', () => loadRemoteVersion(text, '已載入檔案的新版'))
+    edStatus.append(load)
+  }
+
+  const checkServerDeck = async () => {
+    const rel = state.deckUrl
+    if (remoteChecking || editor.hidden || !rel || !hasDeckServer) return
+    // 正在拖曳時換掉內容，放開那一下會落在別的區塊上
+    const busy = () => saveFlags.saving || blockEdit || dragCtx || thumbDrag || dialogOpen()
+    if (document.hidden || busy()) return
+    const started = Date.now()
+    remoteChecking = true
+    try {
+      const res = await fetch(`${encodePath(rel)}?t=${started}`, { cache: 'no-store' })
+      if (!res.ok) return
+      const remote = await res.text()
+      // 等回應的期間換了檔、進了播放、開始拖曳 — 這份回應不算
+      if (rel !== state.deckUrl || editor.hidden || busy()) return
+      // 提示被打字洗掉了就再提示一次：有新版這件事不能只出現一下就不見
+      const offered = Boolean(edStatus.querySelector('[data-remote]'))
+      const verdict = SaveLogic.remoteChange({
+        remote, clean: state.cleanText, dirty: edDirty, seen: offered ? remoteSeen : null,
+        asked: started, wrote: lastLocalWrite,
+      })
+      if (verdict === 'load') loadRemoteVersion(remote, '檔案在別處更新了，已載入新版')
+      else if (verdict === 'offer') offerRemoteVersion(remote)
+    } catch {
+      // 這一輪抓不到就等下一輪
+    } finally {
+      remoteChecking = false
+    }
+  }
+
+  setInterval(checkServerDeck, WATCH_MS)
+  // 分頁在背景時不抓；切回來馬上看一次
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkServerDeck()
   })
 
   const updateFindCount = () => {
@@ -4550,6 +4736,8 @@ const SaveLogic = (() => {
       baseUrl: state.deckBaseUrl,
       index: state.index,
       dirty: edDirty,
+      // 有未存的修改時，一併記下「檔案裡原本的內容」— 重整回來才看得出檔案有沒有被別人改過
+      clean: edDirty && typeof state.cleanText === 'string' ? state.cleanText : undefined,
       cursor: !editor.hidden ? edText.selectionStart : 0,
       scroll: !editor.hidden ? edText.scrollTop : 0,
     }
@@ -4601,7 +4789,7 @@ const SaveLogic = (() => {
         }
       }
       state.sourceText = s.text
-      state.cleanText = s.dirty ? null : s.text
+      state.cleanText = s.dirty ? (typeof s.clean === 'string' ? s.clean : null) : s.text
       // 舊版存的現場沒有 deckUrl 欄位；那時 mdPath 在 decks/ 底下就代表它是 server 上的那個檔
       state.deckUrl = typeof s.deckUrl === 'string'
         ? s.deckUrl

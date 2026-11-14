@@ -30,8 +30,8 @@ node server.js        # → http://localhost:4646（PORT 環境變數可換）
 **或零安裝**
 
 1. 雙擊 `index.html` 打開瀏覽器
-2. 按「**新簡報**」直接開始寫，或按「看範例」、拖入你的 `.md`
-3. 含圖片的簡報：把 `.md` 和圖片放同一個資料夾，**整個資料夾拖進來**
+2. 按「**新簡報**」直接開始寫，或按「看範例」、拖入你的 `.simppt`／`.md`
+3. 含圖片的簡報：把簡報檔和圖片放同一個資料夾，**整個資料夾拖進來**
 4. `F` 全螢幕開始播（或錄影）
 
 ## 簡報語法
@@ -104,7 +104,7 @@ color: #ffffff
 
 **存檔**
 
-- `Ctrl+S` 存檔：開啟的檔案直接**寫回原檔**。新簡報第一次存檔會問檔名、存進 `decks/`（開本機 server 時；撞名會請你改名，**不會蓋掉既有的檔**）；沒開 server 就跳另存視窗（Chrome/Edge）或下載 .md
+- `Ctrl+S` 存檔：開啟的檔案直接**寫回原檔**。新簡報第一次存檔會問檔名、存進 `decks/`（開本機 server 時；撞名會請你改名，**不會蓋掉既有的檔**）；沒開 server 就跳另存視窗（Chrome/Edge）或下載檔案
 - 右上角寫著**存在哪個檔、存了沒**（尚未存檔／有未存的變更／已存檔＋時間／存檔失敗）。「已存檔」是寫完再讀回來比對過才顯示；存檔失敗會另外下載一份當備份
 - 重整／關瀏覽器會**自動記住現場**（內容、頁數、開啟的檔案），回來繼續編；「首頁」鈕才會清掉
 - 首頁的「歷史備份」：編輯內容每分鐘自動備份，最多 20 份
@@ -132,6 +132,56 @@ color: #ffffff
 
 - 首頁「**AI 生成**」：貼上內容，生成一份簡報
 - 編輯器「**AI 編輯**」：跟 AI 說要怎麼調整這份簡報
+- 預覽下方「**AI 插入**」：說一句話（例如「講番茄鐘工作法，3 張以內」），AI 寫幾頁接在目前這頁後面。新頁沿用這份簡報的配色，其他頁不動；不滿意按「復原」
+
+**檔案在別處被改了**
+
+- 編輯器開著時，別的程式（AI 透過下面的 API／MCP、另一個編輯器）改了同一個檔，編輯器會自己載入新版，旁邊有「復原」
+- 你手上有還沒存的修改時不會被換掉，只提示「檔案在別處有新版」，按「載入新版」才換
+
+## 簡報檔：`.simppt`
+
+一份簡報就是一個 `.simppt` 檔，內容是上面那套 Markdown，用任何文字編輯器都能開。新簡報存檔預設用這個副檔名；舊的 `.md` 照樣能開、能存回原檔（存檔時名字打 `.md` 也可以繼續用 `.md`）。
+
+## 讓程式和 AI 改簡報
+
+逐頁操作有三個入口，背後是同一份 `lib/deck-api.mjs`。頁碼從 1 開始，空白頁也算一頁。
+
+**MCP（給 Claude Code 之類的 AI 用）**
+
+```sh
+claude mcp add simppt -s user -- node /path/to/simppt/mcp/server.mjs
+```
+
+直接讀寫 `decks/` 裡的檔案，本機 server 不必開著（`SIMPPT_ROOT` 可以指到別的資料夾）。裝好之後就能說「在我那份演講簡報第 8 頁後面加 3 張講 XXX」。工具：`list_decks`、`get_outline`、`read_slides`、`insert_slides`、`replace_slide`、`delete_slide`、`move_slide`。
+
+**HTTP API（本機 server）**
+
+| 方法 | 路徑 | 內容 |
+|---|---|---|
+| GET | `/api/decks` | 簡報清單 |
+| GET | `/api/outline?deck=名稱` | 每頁的頁碼、標題、版型 |
+| GET | `/api/slides?deck=名稱&from=2&to=4` | 那幾頁的原文 |
+| POST | `/api/slides/insert` | `{ "deck", "after", "markdown" }`，`after: 0` 放最前面 |
+| POST | `/api/slides/replace` | `{ "deck", "page", "markdown" }` |
+| POST | `/api/slides/delete` | `{ "deck", "page" }` |
+| POST | `/api/slides/move` | `{ "deck", "from", "to" }` |
+
+`deck` 可以是 `decks/` 底下的路徑、檔名、不含副檔名的檔名，或只符合一份簡報的片段。POST 要帶 `Content-Type: application/json`；有設 `SIMPPT_TOKEN` 時要帶 `X-Simppt-Token`。回傳 `{ "ok": true, … }` 或 `{ "ok": false, "code", "message" }`。
+
+讀大綱、讀頁、每次寫入都會回一個 `version`。寫入時把它帶回去（`"version": "…"`），簡報在你讀過之後被別人改過就會被擋下（`ECHANGED`），不會改到錯的頁；不帶就不檢查。
+
+沒有設 token 的 server 只回應本機（`localhost`／`127.0.0.1`），而且不接受別的網站的網頁發來的請求。
+
+**SDK（node）**
+
+```js
+import { findDeck, editDeck, insertSlides, outline, readDeck } from './lib/deck-api.mjs'
+
+const root = '/path/to/simppt'
+const deck = findDeck(root, '演講')
+editDeck(root, deck, (text) => insertSlides(text, 3, '--- layout=big\n\n# 87%\n\n這個數字代表什麼'))
+```
 
 ## 播放
 
