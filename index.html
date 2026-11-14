@@ -396,7 +396,7 @@
 
   #editor-body { flex: 1; display: flex; min-height: 0; position: relative; }
   #ed-text {
-    flex: 1; resize: none; border: 0; outline: none;
+    flex: 1; min-width: 0; resize: none; border: 0; outline: none;
     background: var(--color-paper); color: var(--color-ink);
     font: 15px/1.7 var(--font-mono);
     padding: var(--space-7) var(--space-8) var(--space-8);
@@ -404,12 +404,26 @@
   #ed-text::placeholder { color: var(--color-neutral); }
   #ed-preview {
     position: relative;
-    width: 44%; min-width: 320px;
+    flex: none; width: var(--ed-preview-w, 44%); min-width: 320px;
     border-left: 1px solid var(--color-rule);
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: var(--space-4);
     background: var(--color-well); overflow: hidden; padding: var(--space-7);
   }
+  /* 文字與預覽中間那條線：左右拖曳調寬度。比看到的線寬，才抓得到 */
+  #ed-split {
+    flex: none; position: relative; z-index: 5;
+    width: 11px; margin: 0 -5px;
+    cursor: col-resize; touch-action: none;
+  }
+  #ed-split::after {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 3px;
+    background: transparent; transition: background 0.12s;
+  }
+  #ed-split:is(:hover, :focus-visible, .dragging)::after { background: var(--color-accent); }
+  #ed-split:focus { outline: none; }
+  body.splitting { cursor: col-resize; user-select: none; }
+  body.splitting :is(#ed-text, #ed-preview) { pointer-events: none; }
   .mini-tools {
     position: absolute; display: flex; gap: 6px; align-items: center; z-index: 6;
     background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
@@ -874,6 +888,7 @@
       <button class="btn" data-act="clear" title="移除選取文字的樣式">清除</button>
     </div>
     <textarea id="ed-text" spellcheck="false" placeholder="在這裡寫 markdown，--- 分頁"></textarea>
+    <div id="ed-split" role="separator" aria-orientation="vertical" tabindex="0" title="左右拖曳調整寬度（雙擊還原）"></div>
     <div id="ed-preview" tabindex="-1">
       <div id="ed-tools" class="mini-tools" hidden>
         <button class="btn btn-icon" data-act="bold" title="加粗整塊"><strong>B</strong></button>
@@ -4176,6 +4191,75 @@ const SaveLogic = (() => {
     updateTxtTools()
   })
   edText.addEventListener('click', () => updatePreview(true))
+
+  // 文字與預覽中間的分隔線：拖曳改預覽寬度（存成比例，視窗大小變了也維持），雙擊還原
+  {
+    const split = document.getElementById('ed-split')
+    const body = document.getElementById('editor-body')
+    const SPLIT_KEY = 'simppt-split'
+    const MIN_PREVIEW = 320
+    const MIN_TEXT = 260
+    const applySplit = (ratio) => {
+      if (ratio == null) body.style.removeProperty('--ed-preview-w')
+      else body.style.setProperty('--ed-preview-w', `${(ratio * 100).toFixed(2)}%`)
+      if (!editor.hidden) {
+        fitPreview()
+        updatePreview()
+      }
+    }
+    const ratioAt = (clientX) => {
+      const box = body.getBoundingClientRect()
+      const max = Math.max(MIN_PREVIEW, box.width - MIN_TEXT)
+      const width = Math.min(max, Math.max(MIN_PREVIEW, box.right - clientX))
+      return width / box.width
+    }
+    const remember = (ratio) => {
+      try {
+        if (ratio == null) localStorage.removeItem(SPLIT_KEY)
+        else localStorage.setItem(SPLIT_KEY, String(ratio))
+      } catch { /* 存不了就只是下次不記得 */ }
+    }
+    let current = null
+    try {
+      const saved = Number(localStorage.getItem(SPLIT_KEY))
+      if (saved > 0 && saved < 1) current = saved
+    } catch { /* 讀不到就用預設 */ }
+    if (current != null) body.style.setProperty('--ed-preview-w', `${(current * 100).toFixed(2)}%`)
+
+    split.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      split.setPointerCapture(e.pointerId)
+      split.classList.add('dragging')
+      document.body.classList.add('splitting')
+    })
+    split.addEventListener('pointermove', (e) => {
+      if (!split.classList.contains('dragging')) return
+      current = ratioAt(e.clientX)
+      applySplit(current)
+    })
+    const endDrag = () => {
+      if (!split.classList.contains('dragging')) return
+      split.classList.remove('dragging')
+      document.body.classList.remove('splitting')
+      remember(current)
+    }
+    split.addEventListener('pointerup', endDrag)
+    split.addEventListener('pointercancel', endDrag)
+    split.addEventListener('dblclick', () => {
+      current = null
+      applySplit(null)
+      remember(null)
+    })
+    split.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      e.preventDefault()
+      const box = document.getElementById('ed-preview').getBoundingClientRect()
+      current = ratioAt(box.left + (e.key === 'ArrowLeft' ? -24 : 24))
+      applySplit(current)
+      remember(current)
+    })
+  }
 
   window.addEventListener('resize', () => {
     if (!editor.hidden) {
