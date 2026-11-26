@@ -481,6 +481,7 @@
   .preset svg { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--color-well); color: var(--color-neutral); }
   .preset:hover svg { color: var(--color-muted); }
   .preset svg .hot { fill: var(--color-accent); }
+  #preset-layouts.with-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   @media (max-width: 640px) { #preset-layouts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   #ed-viewport {
     position: relative;
@@ -3591,7 +3592,55 @@ const SaveLogic = (() => {
     edText.focus()
   }
 
+  // --- 製作圖卡 ---
+  // 版型面板的最後一格。只有 server 說它有圖卡工具（/__decks 的 canMakeCards）才出現。
+  // 按下去 server 會開圖卡工具的視窗；那邊每輸出一張，這裡就在目前這頁後面加一頁、整頁就是那張卡。
+  // /__card 會等到下一張做好才回答，所以一張一張問，問到視窗關掉為止。
+  let canMakeCards = false
+  let makingCards = false
+  const CARD_ART = '<rect x="4" y="4" width="40" height="19" rx="1.5" opacity="0.45"/><rect class="hot" x="10" y="10" width="28" height="4"/><rect x="15" y="16.5" width="18" height="1.5"/>'
+  const askCard = (body) => fetch('/__card', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders() }, body: JSON.stringify(body) })
+  const makeCards = async () => {
+    if (makingCards) {
+      askCard({ focus: true }).catch(() => {})
+      return
+    }
+    makingCards = true
+    setStatus('圖卡視窗開著：做好按輸出，就會加成一頁')
+    try {
+      for (;;) {
+        const res = await askCard({})
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json || !json.ok) {
+          if (json && json.message) showToast(json.message)
+          break
+        }
+        if (editor.hidden) break
+        const before = { text: edText.value, index: previewIdx }
+        const out = SimpptParser.insertSlideAfter(before.text, previewIdx, '', '![](' + json.url + '){x=0 y=0 w=100}')
+        commitPageOp(before, out, '已加入圖卡')
+      }
+    } catch (err) {
+      showToast('圖卡工具沒有回應')
+    } finally {
+      makingCards = false
+    }
+  }
+  const cardTile = () => {
+    const card = document.createElement('button')
+    card.type = 'button'
+    card.className = 'preset'
+    card.innerHTML = '<svg viewBox="0 0 48 27" fill="currentColor" aria-hidden="true">' + CARD_ART + '</svg>'
+    card.append('製作圖卡')
+    card.addEventListener('click', () => {
+      closePresetPanel()
+      makeCards()
+    })
+    return card
+  }
+
   const buildPresetPanel = () => {
+    presetLayouts.classList.toggle('with-cards', canMakeCards)
     presetLayouts.replaceChildren(...LAYOUT_PRESETS.map((preset) => {
       const card = document.createElement('button')
       card.type = 'button'
@@ -3602,7 +3651,7 @@ const SaveLogic = (() => {
       card.append(preset.name)
       card.addEventListener('click', () => usePreset(preset))
       return card
-    }))
+    }), ...(canMakeCards ? [cardTile()] : []))
   }
 
   const closePresetPanel = () => {
@@ -3839,6 +3888,7 @@ const SaveLogic = (() => {
       hasDeckServer = Boolean(json && json.ok)
       if (!hasDeckServer) return
       canDeleteDecks = json.canDelete === true
+      canMakeCards = json.canMakeCards === true
       deckList.replaceChildren(...json.decks.map(deckRow))
       deckEmpty.hidden = json.decks.length > 0
       landDecks.hidden = false

@@ -43,6 +43,11 @@
 
 - 頁面只在 `/__decks` 回 `canDelete: true` 時才理 Delete 鍵（滑鼠停著或焦點所在的那一列），然後 `POST /__delete {path}`。這個 server 沒有做 `/__delete`、也不回 `canDelete`——只有 DukPPT 有（丟資源回收筒）。要在這裡做，先想好刪掉的檔放哪裡救得回來
 
+## 製作圖卡
+
+- 版型面板多一格「製作圖卡」，只在 `/__decks` 回 `canMakeCards: true` 時出現。按了就一直問 `POST /__card`（等到下一張圖卡做好才回 `{ ok, url }`；視窗關了回 `{ ok: false, closed: true }`），每拿到一張就在目前這頁後面加一頁 `![](url){x=0 y=0 w=100}`（整頁滿版）
+- 這個 server 沒有 `/__card`——只有 DukPPT 有（它開 FreeForCut 的視窗、把輸出的檔存到簡報旁邊的 `img/`）
+
 ## 誰可以打 server（別改鬆）
 
 - 檔案路徑一律用 `lib/deck-store.mjs` 的 `insideRoot` 判斷，它看的是檔案在硬碟上真正的位置。只檢查網址或字串裡有沒有「.」開頭是不夠的：Windows 上 `.git` 也叫 `GIT~1`，2026-11-14 之前 `/GIT~1/config` 拿得到 git 設定
