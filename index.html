@@ -704,6 +704,14 @@
   #name-row span { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-neutral); }
   .card-error { color: var(--color-danger); font-size: var(--text-sm); min-height: 1.4em; }
   .card-error.waiting { color: var(--color-neutral); }
+  /* AI 正在寫的時候：整個畫面先不給動，只留下面這顆藥丸（進度＋停） */
+  #ai-live { position: fixed; inset: 0; z-index: 22; display: flex; align-items: flex-end; justify-content: center; padding-bottom: var(--space-8); }
+  #ai-live-pill {
+    display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    background: var(--color-paper-2); border: 1px solid var(--color-accent); border-radius: 999px;
+    font-size: var(--text-sm); font-variant-numeric: tabular-nums; box-shadow: 0 8px 30px oklch(0% 0 0 / 0.45);
+  }
+  #ai-live-stop { height: 30px; padding: 0 var(--space-3); border-radius: 999px; }
   .card-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
   .card-actions .btn { height: 38px; padding: 0 var(--space-4); }
   #name-overwrite { margin-right: auto; padding: 0 var(--space-2); color: var(--color-danger); }
@@ -802,6 +810,10 @@
       <button id="gen-submit" class="btn btn-primary">生成</button>
     </div>
   </div>
+</div>
+
+<div id="ai-live" hidden>
+  <div id="ai-live-pill"><span id="ai-live-text">AI 正在寫…</span><button id="ai-live-stop" class="btn btn-ghost" title="停下來（Esc）">停</button></div>
 </div>
 
 <div id="name-modal" class="modal" hidden>
@@ -3838,7 +3850,7 @@ const SaveLogic = (() => {
   // 等 AI 的時候：按鈕上數秒、下面一行說現在在幹嘛，取消是真的取消
   let genAbort = null
   let genTicker = null
-  const GEN_WAIT_NOTE = '本機的 claude 正在寫，通常半分鐘到一分鐘，寫好會直接打開。不想等就按取消。'
+  const GEN_WAIT_NOTE = '本機的 claude 正在啟動，一開始寫就會在編輯器裡一頁一頁冒出來。不想等就按取消。'
   const startGenWait = (busy) => {
     const began = Date.now()
     const tick = () => { genSubmitBtn.textContent = `${busy} ${Math.floor((Date.now() - began) / 1000)} 秒` }
@@ -3885,34 +3897,169 @@ const SaveLogic = (() => {
     }),
   }
 
+  // --- AI 邊寫，投影片邊冒出來 ---
+  // server 一段一段把字送過來（一行一個 JSON）；每來一段就把目前寫到的內容畫進編輯器。
+  // 寫的期間畫面不給動（#ai-live 蓋著），只能按「停」。寫完才照原本的路把結果正式放進去。
+  const aiLiveBox = document.getElementById('ai-live')
+  const aiLiveText = document.getElementById('ai-live-text')
+  const aiLiveStop = document.getElementById('ai-live-stop')
+  // 正在寫的那一次：{ mode, before, began, written, timer }；沒在寫就是 null
+  let aiLive = null
+
+  // AI 偶爾會把整份包在 ``` 裡；還沒寫完時先把那兩行藏起來，畫面才不會是一塊程式碼
+  const partialDeck = (written) => written.replace(/^\s*```[^\n]*\n/, '').replace(/\n```\s*$/, '')
+
+  // 讀 server 一行一行送來的進度；onText 拿到的是「目前為止寫了什麼」。回傳最後那一行（done）。
+  const readAiStream = async (res, onText) => {
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let pending = ''
+    let written = ''
+    let last = null
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      pending += decoder.decode(value, { stream: true })
+      const lines = pending.split('\n')
+      pending = lines.pop()
+      for (const line of lines) {
+        let event = null
+        try { event = JSON.parse(line) } catch { continue }
+        if (event && event.type === 'delta' && typeof event.text === 'string') {
+          written += event.text
+          onText(written)
+        } else if (event && event.type === 'done') {
+          last = event
+        }
+      }
+    }
+    return last || { ok: false, message: 'AI 寫到一半斷線了' }
+  }
+
+  const drawAiLive = () => {
+    if (!aiLive) return
+    const text = partialDeck(aiLive.written)
+    let pages = 0
+    if (aiLive.mode === 'insert') {
+      const out = SimpptParser.insertSlidesAfter(aiLive.before.text, genInsertAfter, text)
+      pages = out.count
+      if (out.count > 0 && out.text !== edText.value) {
+        edText.value = out.text
+        jumpEditorToSlide(genInsertAfter + out.count)
+      }
+    } else if (text !== edText.value) {
+      edText.value = text
+      edText.setSelectionRange(text.length, text.length)
+      edText.scrollTop = edText.scrollHeight
+      updatePreview(true)
+      pages = SimpptParser.parse(text, { keepEmpty: true }).slides.length
+    } else {
+      pages = SimpptParser.parse(text, { keepEmpty: true }).slides.length
+    }
+    const seconds = Math.floor((Date.now() - aiLive.began) / 1000)
+    const doing = aiLive.mode === 'insert' ? `AI 正在加第 ${Math.max(pages, 1)} 頁` : `AI 正在寫第 ${Math.max(pages, 1)} 頁`
+    aiLiveText.textContent = `${doing}… ${seconds} 秒`
+  }
+
+  // 第一段字到了：收起對話框，換成在編輯器裡看它寫
+  const beginAiLive = (mode) => {
+    const before = { text: edText.value, index: previewIdx }
+    genModal.hidden = true
+    if (mode === 'create') {
+      stopPolling()
+      stopTimer()
+      state.mdPath = ''
+      state.deckUrl = ''
+      state.deckBaseUrl = ''
+      state.fileMap = new Map()
+      state.sourceText = ''
+      state.cleanText = null
+      landing.hidden = true
+      stage.hidden = true
+      editor.hidden = false
+      edText.value = ''
+      fitPreview()
+    }
+    edText.readOnly = true
+    aiLiveBox.hidden = false
+    aiLive = { mode, before, began: aiLive ? aiLive.began : Date.now(), written: '', timer: setInterval(drawAiLive, 150) }
+  }
+
+  // 收工：把編輯器還原成 AI 動手之前的樣子，後面再照正常流程放結果進去
+  const endAiLive = () => {
+    if (!aiLive) return null
+    const was = aiLive
+    clearInterval(was.timer)
+    aiLive = null
+    aiLiveBox.hidden = true
+    edText.readOnly = false
+    if (was.mode !== 'create') {
+      edText.value = was.before.text
+      previewIdx = was.before.index
+      jumpEditorToSlide(was.before.index)
+    }
+    return was
+  }
+
+  aiLiveStop.addEventListener('click', () => { if (genAbort) genAbort.abort() })
+  // 寫的期間鍵盤也不給動；Esc 等於按「停」
+  window.addEventListener('keydown', (e) => {
+    if (!aiLive) return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    if (e.key === 'Escape' && genAbort) genAbort.abort()
+  }, true)
+
   genSubmitBtn.addEventListener('click', async () => {
     const content = genText.value.trim()
     if (!content) {
       genError.textContent = GEN_MODES[genMode].empty
       return
     }
+    const mode = genMode
+    const began = Date.now()
     genSubmitBtn.disabled = true
-    startGenWait(GEN_MODES[genMode].busy)
+    startGenWait(GEN_MODES[mode].busy)
     genAbort = new AbortController()
+    // 出了錯要讓人看得到：對話框還開著就寫在裡面，已經收起來了就用提示
+    const report = (message) => {
+      if (genModal.hidden) showToast(message)
+      else genError.textContent = message
+    }
     try {
-      const request = GEN_REQUESTS[genMode](content)
+      const request = GEN_REQUESTS[mode](content)
       const res = await fetch(request.url, {
         method: 'POST',
         signal: genAbort.signal,
-        headers: { ...request.headers, ...apiHeaders() },
+        headers: { ...request.headers, Accept: 'application/x-ndjson, application/json', ...apiHeaders() },
         body: request.body,
       })
-      const data = await res.json()
+      const streamed = res.ok && res.body && /ndjson/i.test(res.headers.get('content-type') || '')
+      const data = streamed
+        ? await readAiStream(res, (written) => {
+          if (!aiLive) {
+            aiLive = { began }
+            beginAiLive(mode)
+          }
+          aiLive.written = written
+        })
+        : await res.json()
       stopGenWait()
+      const live = endAiLive()
       if (!res.ok || !data.ok) {
-        genError.textContent = data.message || `失敗（${res.status}）`
+        // 新簡報寫到一半失敗：回到首頁，不留半份在編輯器裡
+        if (live && mode === 'create') {
+          editor.hidden = true
+          landing.hidden = false
+        }
+        report(data.message || `失敗（${res.status}）`)
         return
       }
-      if (genMode === 'insert') {
+      if (mode === 'insert') {
         const before = { text: edText.value, index: previewIdx }
         const out = SimpptParser.insertSlidesAfter(before.text, genInsertAfter, data.markdown)
         if (out.count === 0) {
-          genError.textContent = 'AI 沒有寫出任何一頁，換個說法再試一次'
+          report('AI 沒有寫出任何一頁，換個說法再試一次')
           return
         }
         genModal.hidden = true
@@ -3920,7 +4067,7 @@ const SaveLogic = (() => {
         return
       }
       genModal.hidden = true
-      if (genMode === 'create') {
+      if (mode === 'create') {
         stopPolling()
         state.mdPath = ''
         state.fileMap = new Map()
@@ -3928,11 +4075,27 @@ const SaveLogic = (() => {
         state.cleanText = null
       }
       // AI 給的內容還沒寫進任何檔案 — enterEditor 會拿它跟 cleanText 比，標成有未存的變更
-      enterEditor(data.markdown, { keepHistory: genMode === 'revise' })
+      enterEditor(data.markdown, { keepHistory: mode === 'revise' })
     } catch (err) {
       stopGenWait()
-      // 自己按的取消不是錯誤
-      if (!err || err.name !== 'AbortError') genError.textContent = `連線失敗：${err.message}`
+      const live = endAiLive()
+      const stopped = Boolean(err && err.name === 'AbortError')
+      if (live && mode === 'create') {
+        // 自己按停：寫到一半的留著當新簡報。其他失敗也一樣留著，總比全丟好。
+        const kept = partialDeck(live.written).trim()
+        if (kept) {
+          enterEditor(kept)
+          showToast(stopped ? '已停下來，寫到一半的留在這裡' : 'AI 寫到一半斷了，寫好的部分留在這裡')
+        } else {
+          editor.hidden = true
+          landing.hidden = false
+        }
+      } else if (live) {
+        showToast(stopped ? '已停下來，簡報沒有變動' : `連線失敗，簡報沒有變動：${err.message}`)
+      } else if (!stopped) {
+        // 自己按的取消不是錯誤
+        report(`連線失敗：${err.message}`)
+      }
     } finally {
       stopGenWait()
       genAbort = null
@@ -4374,7 +4537,7 @@ const SaveLogic = (() => {
   })
 
   // 對話框開著的時候，編輯器的快捷鍵都先停用（存檔、播放除外的那些新鍵）
-  const dialogOpen = () => Boolean(document.querySelector('.modal:not([hidden])'))
+  const dialogOpen = () => Boolean(document.querySelector('.modal:not([hidden])')) || aiLive !== null
 
   const pageOpHere = (name) => {
     menuPage = previewIdx

@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildGeneratePrompt, buildRevisePrompt, buildInsertPrompt, stripFence } from './lib/generate-prompt.mjs'
-import { runClaudePrint } from './lib/run-claude.mjs'
+import { runClaudePrint, streamAnswer, wantsStream } from './lib/run-claude.mjs'
 import { writeDeck, listDecks, insideRoot } from './lib/deck-store.mjs'
 import { handleApi } from './lib/api-routes.mjs'
 import { sameSite } from './lib/same-site.mjs'
@@ -16,6 +16,28 @@ const PORT = Number(process.env.PORT) || 4646
 const TOKEN = process.env.SIMPPT_TOKEN || ''
 
 const authorized = (req) => !TOKEN || req.headers['x-simppt-token'] === TOKEN
+
+// Run the local claude on a prompt and answer the request with what it writes: piece by piece
+// when the page asked for that (it shows the slides as they appear), otherwise all at once.
+const answerAi = async (req, res, prompt, tidy = (text) => text) => {
+  if (wantsStream(req.headers.accept)) {
+    const stopper = new AbortController()
+    // The page went away or pressed stop: do not keep claude writing for nobody.
+    res.on('close', () => { if (!res.writableEnded) stopper.abort() })
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' })
+    await streamAnswer(prompt, { cwd: ROOT, signal: stopper.signal, tidy, send: (line) => res.write(line) })
+    res.end()
+    return
+  }
+  const result = await runClaudePrint(prompt, { cwd: ROOT })
+  if (!result.ok) {
+    res.writeHead(result.status, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: false, message: result.message }))
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ ok: true, markdown: tidy(result.markdown) }))
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -118,15 +140,7 @@ const server = http.createServer((req, res) => {
           res.end('{"ok":false,"message":"內容過大或空白（上限 200KB）"}')
           return
         }
-        const prompt = buildGeneratePrompt(buf.toString('utf8'))
-        const result = await runClaudePrint(prompt, { cwd: ROOT })
-        if (!result.ok) {
-          res.writeHead(result.status, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: false, message: result.message }))
-          return
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, markdown: result.markdown }))
+        await answerAi(req, res, buildGeneratePrompt(buf.toString('utf8')))
       })
       return
     }
@@ -153,15 +167,7 @@ const server = http.createServer((req, res) => {
           res.end('{"ok":false,"message":"缺少 markdown 或 instruction"}')
           return
         }
-        const prompt = buildRevisePrompt(markdown, instruction)
-        const result = await runClaudePrint(prompt, { cwd: ROOT })
-        if (!result.ok) {
-          res.writeHead(result.status, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: false, message: result.message }))
-          return
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, markdown: result.markdown }))
+        await answerAi(req, res, buildRevisePrompt(markdown, instruction))
       })
       return
     }
@@ -196,14 +202,7 @@ const server = http.createServer((req, res) => {
           return
         }
         // The editor puts the pages in itself (and can undo it); nothing is written here.
-        const result = await runClaudePrint(buildInsertPrompt(markdown, after, instruction), { cwd: ROOT })
-        if (!result.ok) {
-          res.writeHead(result.status, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: false, message: result.message }))
-          return
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, markdown: stripFence(result.markdown) }))
+        await answerAi(req, res, buildInsertPrompt(markdown, after, instruction), stripFence)
       })
       return
     }
