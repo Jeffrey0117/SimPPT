@@ -49,6 +49,13 @@
 - 工具輸出的方式是 `<a download>.click()`：`takeCardExports` 把 iframe 裡的那個 click 換掉，檔案走 `uploadImage`（跟貼上圖片同一條路），然後在目前這頁後面加一頁 `![](url){x=0 y=0 w=100}`（整頁滿版）
 - 這個 server 沒有 `/__cards/`——只有 DukPPT 帶著（它的 `scripts/vendor.js` 把 clipcraft 打包進去）
 
+## 素材庫
+
+- 只在 `/__decks` 回 `hasAssets: true` 時才有（這個 server 沒有，DukPPT 有）：「加圖片」改成打開 `#asset-panel`，沒有就照舊直接選檔
+- server 那邊是 `GET /__assets`（列表）、`GET /__assets/file/<名字>`、`POST /__assets`（圖的位元組，或 `{url}`）、`POST /__assets/delete {name}`
+- 用一張圖＝把它抓回來再走 `uploadImage`（變成簡報自己的圖），所以簡報不會指到素材庫裡的檔
+- 拖進編輯區的圖由 `editor` 上的 `drop` 接走（`draggedPictures`）；不是圖就不攔，照舊交給 document 那個開簡報的 drop
+
 ## 誰可以打 server（別改鬆）
 
 - 檔案路徑一律用 `lib/deck-store.mjs` 的 `insideRoot` 判斷，它看的是檔案在硬碟上真正的位置。只檢查網址或字串裡有沒有「.」開頭是不夠的：Windows 上 `.git` 也叫 `GIT~1`，2026-11-14 之前 `/GIT~1/config` 拿得到 git 設定

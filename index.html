@@ -481,6 +481,25 @@
   .preset svg { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--color-well); color: var(--color-neutral); }
   .preset:hover svg { color: var(--color-muted); }
   .preset svg .hot { fill: var(--color-accent); }
+  /* 素材庫：從預覽那一塊的底下展開 */
+  #asset-panel {
+    position: absolute; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); z-index: 20;
+    max-height: 52%; overflow-y: auto;
+    display: flex; flex-direction: column; gap: var(--space-3);
+    background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-l);
+    padding: var(--space-4);
+  }
+  #asset-panel[hidden] { display: none; }
+  #asset-panel p { font-size: var(--text-sm); color: var(--color-muted); }
+  #asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: var(--space-2); }
+  .asset {
+    aspect-ratio: 1; padding: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2);
+    font: inherit; font-size: var(--text-xs); color: var(--color-muted);
+    background: var(--color-well); border: 1px solid var(--color-rule); border-radius: var(--radius-m); cursor: pointer;
+    transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
+  }
+  .asset:hover { border-color: var(--color-accent); color: var(--color-ink); }
+  .asset :is(img, video) { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none; }
   /* 製作圖卡：工具蓋在編輯區上 */
   #card-maker { position: absolute; inset: 0; z-index: 40; display: flex; background: var(--color-paper); }
   #card-maker[hidden] { display: none; }
@@ -3289,11 +3308,8 @@ const SaveLogic = (() => {
   imagePicker.hidden = true
   document.body.append(imagePicker)
 
-  document.getElementById('ed-add-image').addEventListener('click', () => imagePicker.click())
-  imagePicker.addEventListener('change', async () => {
-    const file = imagePicker.files && imagePicker.files[0]
-    imagePicker.value = ''
-    if (!file) return
+  // 把一張圖放進這一頁（存成簡報的圖，跟貼上圖片同一條路）
+  const addImageFile = async (file) => {
     setStatus('圖片上傳中…')
     try {
       const json = await uploadImage(file)
@@ -3305,6 +3321,152 @@ const SaveLogic = (() => {
       showToast('圖片上傳失敗，再試一次或檢查網路')
       setStatus('')
     }
+  }
+  imagePicker.addEventListener('change', async () => {
+    const file = imagePicker.files && imagePicker.files[0]
+    imagePicker.value = ''
+    if (file) await addImageFile(file)
+  })
+
+  // --- 素材庫 ---
+  // 常用的圖收在一個地方，哪份簡報都拿得到。只有 server 有素材庫（/__decks 的 hasAssets）才有：
+  // 這時「加圖片」打開的是素材庫（第一格還是「從電腦選」），沒有的話照舊直接選檔。
+  //   點一張 → 放進這一頁（複製一份成簡報自己的圖）
+  //   把圖拖進素材庫 → 收著；拖到編輯區其他地方 → 收著，並且放進這一頁
+  //   滑鼠停在一張上按 Delete → 從素材庫拿掉
+  let hasAssets = false
+  let assetPanel = null
+  const assetGrid = document.createElement('div')
+  assetGrid.id = 'asset-grid'
+  const addImageBtn = document.getElementById('ed-add-image')
+
+  const useAsset = async (item) => {
+    try {
+      const blob = await (await fetch(item.url, { headers: apiHeaders() })).blob()
+      await addImageFile(new File([blob], item.name, { type: blob.type }))
+    } catch (err) {
+      showToast('這張圖放不進來')
+    }
+  }
+  const assetTile = (item) => {
+    const tile = document.createElement('button')
+    tile.type = 'button'
+    tile.className = 'asset'
+    tile.title = item.name
+    tile.dataset.name = item.name
+    const isVideo = /\.(webm|mp4)$/i.test(item.name)
+    const pic = document.createElement(isVideo ? 'video' : 'img')
+    pic.src = item.url
+    pic.draggable = false
+    if (isVideo) {
+      pic.muted = true
+      pic.preload = 'metadata'
+    }
+    tile.append(pic)
+    tile.addEventListener('click', () => useAsset(item))
+    return tile
+  }
+  const pickTile = () => {
+    const tile = document.createElement('button')
+    tile.type = 'button'
+    tile.className = 'asset asset-pick'
+    tile.append(icon('i-image'), '從電腦選')
+    tile.addEventListener('click', () => imagePicker.click())
+    return tile
+  }
+  const drawAssets = async () => {
+    try {
+      const res = await fetch('/__assets', { headers: apiHeaders(), cache: 'no-store' })
+      const json = res.ok ? await res.json() : null
+      const items = json && json.ok ? json.items : []
+      assetGrid.replaceChildren(pickTile(), ...items.map(assetTile))
+    } catch (err) {
+      assetGrid.replaceChildren(pickTile())
+    }
+  }
+  const closeAssets = () => {
+    if (assetPanel) assetPanel.hidden = true
+  }
+  const openAssets = () => {
+    if (!assetPanel) {
+      assetPanel = document.createElement('div')
+      assetPanel.id = 'asset-panel'
+      const hint = document.createElement('p')
+      hint.textContent = '素材庫：把圖拖進來就收著。點一下放進這一頁，滑鼠停著按 Delete 拿掉。'
+      assetPanel.append(hint, assetGrid)
+      edPreviewBox.append(assetPanel)
+    }
+    assetPanel.hidden = false
+    drawAssets()
+  }
+  addImageBtn.addEventListener('click', () => {
+    if (!hasAssets) imagePicker.click()
+    else if (assetPanel && !assetPanel.hidden) closeAssets()
+    else openAssets()
+  })
+  document.addEventListener('pointerdown', (e) => {
+    if (!assetPanel || assetPanel.hidden || assetPanel.contains(e.target) || addImageBtn.contains(e.target)) return
+    closeAssets()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (!assetPanel || assetPanel.hidden) return
+    if (e.key === 'Escape') {
+      closeAssets()
+      return
+    }
+    const tile = e.key === 'Delete' ? assetGrid.querySelector('.asset[data-name]:hover') : null
+    if (!tile) return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    fetch('/__assets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders() }, body: JSON.stringify({ name: tile.dataset.name }) })
+      .then((res) => showToast(res.ok ? '已從素材庫拿掉（在資源回收筒）' : '拿不掉這張'))
+      .catch(() => showToast('拿不掉這張'))
+      .finally(drawAssets)
+  }, true)
+
+  // 拖進來的東西裡的圖：電腦上的檔案，或從瀏覽器拖來的圖（拿它的網址；網頁上的小圖常是 data: 開頭）
+  const draggedPictures = (e) => {
+    const files = [...e.dataTransfer.files].filter((file) => /^(image|video)\//.test(file.type))
+    if (files.length > 0) return { files, src: '' }
+    const html = e.dataTransfer.getData('text/html')
+    const img = html ? new DOMParser().parseFromString(html, 'text/html').querySelector('img') : null
+    const src = ((img && img.getAttribute('src')) || e.dataTransfer.getData('text/uri-list').split('\n')[0] || '').trim()
+    const ours = src.startsWith(location.origin + '/')
+    return { files: [], src: !ours && /^(https?:\/\/|data:image\/)/i.test(src) ? src : '' }
+  }
+  const keepAsset = async (picture) => {
+    const viaUrl = typeof picture === 'string'
+    const res = await fetch('/__assets', {
+      method: 'POST',
+      headers: viaUrl
+        ? { 'Content-Type': 'application/json', ...apiHeaders() }
+        : { 'Content-Type': picture.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(picture.name || 'picture.png'), ...apiHeaders() },
+      body: viaUrl ? JSON.stringify({ url: picture }) : picture,
+    })
+    const json = await res.json().catch(() => null)
+    if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || '收不進素材庫')
+    return json.item
+  }
+  editor.addEventListener('drop', async (e) => {
+    if (!hasAssets) return
+    const { files, src } = draggedPictures(e)
+    if (files.length === 0 && !src) return
+    e.preventDefault()
+    e.stopPropagation()
+    document.body.classList.remove('dragover')
+    const onlyKeep = Boolean(assetPanel && !assetPanel.hidden && assetPanel.contains(e.target))
+    try {
+      const inline = src.startsWith('data:') ? await (await fetch(src)).blob() : null
+      const pictures = inline ? [new File([inline], 'picture', { type: inline.type })] : (src ? [src] : files)
+      for (const picture of pictures) {
+        const kept = await keepAsset(picture)
+        if (!onlyKeep) await useAsset(kept)
+      }
+      showToast(onlyKeep ? '收進素材庫了' : '放進這一頁，也收進素材庫了')
+    } catch (err) {
+      showToast(err.message || '收不進素材庫')
+    }
+    if (assetPanel && !assetPanel.hidden) drawAssets()
   })
 
   edPreviewBox.addEventListener('mousedown', (e) => {
@@ -3938,6 +4100,8 @@ const SaveLogic = (() => {
       if (!hasDeckServer) return
       canDeleteDecks = json.canDelete === true
       canMakeCards = json.canMakeCards === true
+      hasAssets = json.hasAssets === true
+      if (hasAssets) addImageBtn.title = '加圖片：打開素材庫（常用的圖），或從電腦選'
       deckList.replaceChildren(...json.decks.map(deckRow))
       deckEmpty.hidden = json.decks.length > 0
       landDecks.hidden = false
