@@ -45,6 +45,8 @@ test('runClaudeStream: pieces arrive in order, even when a line is cut in two, a
   assert.deepEqual(answer, { ok: true, markdown: '# One\n\n---\n\n# Two' })
   assert.equal(seen.prompt, 'the prompt')
   assert.ok(seen.args.includes('stream-json') && seen.args.includes('--include-partial-messages'))
+  // started bare, so the first word comes quickly: no tools, no MCP servers, the quick model
+  assert.ok(seen.args.includes('--strict-mcp-config') && seen.args.join(' ').includes('--tools ""') && seen.args.join(' ').includes('--model sonnet'))
 })
 
 test('runClaudeStream: with no final line, what was written so far is the answer', async () => {

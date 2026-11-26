@@ -33,9 +33,15 @@
 ## AI 邊寫邊出現
 
 - `lib/run-claude.mjs` 的 `runClaudeStream` 用 `claude -p --output-format stream-json --include-partial-messages`，一段一段把字交出來；`streamAnswer` 把它變成一行一個 JSON（`delta`…最後一行 `done`）。頁面的請求帶 `Accept: application/x-ndjson` 才走這條，否則照舊一次回完
+- claude 是用「精簡」的方式開的（`leanArgs`：不載入使用者自己的工具和 MCP、用 sonnet；`SIMPPT_AI_MODEL` 可換）。2026-11-26 量過：6KB 的筆記，第一個字從 9–14 秒變 2–9 秒，總時間少三成。它寫之前要不要先想幾秒是模型自己決定的，`MAX_THINKING_TOKENS=0`、`--effort low`、設定檔都關不掉
+- 串流一開始（還沒有字）頁面就進 `beginAiLive`，想的那幾秒顯示「AI 正在想怎麼排」；所以 server 要馬上把表頭送出去（`res.flushHeaders()`）
 - 頁面那半在 `beginAiLive`／`drawAiLive`／`endAiLive`：寫的期間 `#ai-live` 蓋住整個畫面、`aiLive` 不是 null（`dialogOpen()` 也算它），編輯器只是拿來顯示。**結束時一律先把編輯器還原成 AI 動手前的樣子**，再照原本的路（`enterEditor`／`commitPageOp`）正式放結果，所以復原、歷史、未存檔狀態都跟以前一樣
 - 「AI 生成」貼的是 hackmd2 筆記網址時由 `lib/note-source.mjs` 換成筆記內容。它只會去問設定好的那一台 hackmd2，貼什麼網址都一樣
 - DukPPT（桌面版，另一個 repo）直接用這幾個 `lib/*.mjs` 和這份 `index.html`：改了這裡，去 dukppt 跑一次 `npm test` 和 `npm run smoke`
+
+## 首頁按 Delete 刪簡報
+
+- 頁面只在 `/__decks` 回 `canDelete: true` 時才理 Delete 鍵（滑鼠停著或焦點所在的那一列），然後 `POST /__delete {path}`。這個 server 沒有做 `/__delete`、也不回 `canDelete`——只有 DukPPT 有（丟資源回收筒）。要在這裡做，先想好刪掉的檔放哪裡救得回來
 
 ## 誰可以打 server（別改鬆）
 

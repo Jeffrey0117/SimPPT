@@ -26,6 +26,8 @@ const answerAi = async (req, res, prompt, tidy = (text) => text) => {
     // The page went away or pressed stop: do not keep claude writing for nobody.
     res.on('close', () => { if (!res.writableEnded) stopper.abort() })
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' })
+    // Sent at once: the page shows "AI is on it" from this moment, before the first word exists.
+    res.flushHeaders()
     await streamAnswer(prompt, { cwd: ROOT, signal: stopper.signal, tidy, send: (line) => res.write(line) })
     res.end()
     return

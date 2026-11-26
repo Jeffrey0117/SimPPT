@@ -3791,8 +3791,41 @@ const SaveLogic = (() => {
     play.setAttribute('aria-label', `播放 ${deck.name}`)
     play.append(icon('i-play'))
     li.append(open, play)
+    li.dataset.path = deck.path
+    li.dataset.name = name.textContent
     return li
   }
+
+  // 首頁：滑鼠停在某份簡報上（或用 Tab 選到它）按 Delete 就刪掉那份。
+  // 只有 server 說它會把檔案丟到救得回來的地方（/__decks 的 canDelete）才有這個功能。
+  let canDeleteDecks = false
+  const deleteDeckRow = async (row) => {
+    try {
+      const res = await fetch('/__delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiHeaders() },
+        body: JSON.stringify({ path: row.dataset.path }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json || !json.ok) {
+        showToast((json && json.message) || '刪不掉這份簡報')
+        return
+      }
+      showToast(`已刪除「${row.dataset.name}」${json.note || ''}`)
+      await loadDeckList()
+    } catch (err) {
+      showToast('刪不掉這份簡報')
+    }
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Delete' || e.repeat || !canDeleteDecks || landing.hidden || dialogOpen()) return
+    if (e.target instanceof Element && e.target.closest('input, textarea, [contenteditable]')) return
+    const focused = document.activeElement instanceof Element ? document.activeElement.closest('.deck-row') : null
+    const row = deckList.querySelector('.deck-row:hover') || focused
+    if (!row) return
+    e.preventDefault()
+    deleteDeckRow(row)
+  })
 
   const loadDeckList = async () => {
     if (!/^https?:$/.test(location.protocol)) return
@@ -3801,6 +3834,7 @@ const SaveLogic = (() => {
       const json = res.ok ? await res.json() : null
       hasDeckServer = Boolean(json && json.ok)
       if (!hasDeckServer) return
+      canDeleteDecks = json.canDelete === true
       deckList.replaceChildren(...json.decks.map(deckRow))
       deckEmpty.hidden = json.decks.length > 0
       landDecks.hidden = false
@@ -3938,6 +3972,11 @@ const SaveLogic = (() => {
 
   const drawAiLive = () => {
     if (!aiLive) return
+    // 還沒寫出第一個字：AI 會先想幾秒要怎麼排
+    if (!aiLive.written) {
+      aiLiveText.textContent = `AI 正在想怎麼排… ${Math.floor((Date.now() - aiLive.began) / 1000)} 秒`
+      return
+    }
     const text = partialDeck(aiLive.written)
     let pages = 0
     if (aiLive.mode === 'insert') {
@@ -3961,7 +4000,7 @@ const SaveLogic = (() => {
     aiLiveText.textContent = `${doing}… ${seconds} 秒`
   }
 
-  // 第一段字到了：收起對話框，換成在編輯器裡看它寫
+  // AI 一接手就收起對話框，換成在編輯器裡看它寫（不等第一個字，它會先想幾秒）
   const beginAiLive = (mode) => {
     const before = { text: edText.value, index: previewIdx }
     genModal.hidden = true
@@ -4035,14 +4074,13 @@ const SaveLogic = (() => {
         body: request.body,
       })
       const streamed = res.ok && res.body && /ndjson/i.test(res.headers.get('content-type') || '')
+      if (streamed) {
+        aiLive = { began }
+        beginAiLive(mode)
+        drawAiLive()
+      }
       const data = streamed
-        ? await readAiStream(res, (written) => {
-          if (!aiLive) {
-            aiLive = { began }
-            beginAiLive(mode)
-          }
-          aiLive.written = written
-        })
+        ? await readAiStream(res, (written) => { if (aiLive) aiLive.written = written })
         : await res.json()
       stopGenWait()
       const live = endAiLive()
