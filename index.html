@@ -500,6 +500,14 @@
   }
   .asset:hover { border-color: var(--color-accent); color: var(--color-ink); }
   .asset :is(img, video) { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none; }
+  /* 上網找圖：文字那一半上面的輸入列（底下那塊網頁是 server 畫的） */
+  #browse-bar {
+    position: absolute; top: 0; z-index: 15; height: 48px; box-sizing: border-box;
+    display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3);
+    background: var(--color-paper-2); border-bottom: 1px solid var(--color-rule);
+  }
+  #browse-bar[hidden] { display: none; }
+  #browse-bar input { flex: 1; min-width: 0; height: 32px; font-size: var(--text-sm); }
   /* 製作圖卡：工具蓋在編輯區上 */
   #card-maker { position: absolute; inset: 0; z-index: 40; display: flex; background: var(--color-paper); }
   #card-maker[hidden] { display: none; }
@@ -3438,12 +3446,20 @@ const SaveLogic = (() => {
     tile.addEventListener('click', () => imagePicker.click())
     return tile
   }
+  const browseTile = () => {
+    const tile = document.createElement('button')
+    tile.type = 'button'
+    tile.className = 'asset asset-pick'
+    tile.append(icon('i-search'), '上網找圖')
+    tile.addEventListener('click', () => (browseOpen() ? closeBrowser() : openBrowser()))
+    return tile
+  }
   const drawAssets = async () => {
     try {
       const res = await fetch('/__assets', { headers: apiHeaders(), cache: 'no-store' })
       const json = res.ok ? await res.json() : null
       const items = json && json.ok ? json.items : []
-      assetGrid.replaceChildren(pickTile(), ...items.map(assetTile))
+      assetGrid.replaceChildren(pickTile(), ...(canBrowse ? [browseTile()] : []), ...items.map(assetTile))
     } catch (err) {
       assetGrid.replaceChildren(pickTile())
     }
@@ -3523,9 +3539,17 @@ const SaveLogic = (() => {
     const onlyKeep = Boolean(assetPanel && !assetPanel.hidden && assetPanel.contains(e.target))
     // 按著 Alt 拖進來：先去背再收（一抓就是去背）
     const cutFirst = canCutOut && e.altKey
+    await takePictures(src ? [src] : files, { onlyKeep, cutFirst })
+  })
+
+  // 收下幾張圖（檔案，或圖的網址）：進素材庫；onlyKeep 不是 true 就也放進這一頁；cutFirst＝先去背
+  const takePictures = async (given, { onlyKeep = false, cutFirst = false } = {}) => {
     try {
-      const inline = src.startsWith('data:') ? await (await fetch(src)).blob() : null
-      const pictures = inline ? [new File([inline], 'picture', { type: inline.type })] : (src ? [src] : files)
+      const pictures = []
+      for (const one of given) {
+        const inline = typeof one === 'string' && one.startsWith('data:') ? await (await fetch(one)).blob() : null
+        pictures.push(inline ? new File([inline], 'picture', { type: inline.type }) : one)
+      }
       if (cutFirst) setStatus('去背中…第一次要下載模型，會久一點')
       for (const picture of pictures) {
         let kept = await keepAsset(picture)
@@ -3541,6 +3565,92 @@ const SaveLogic = (() => {
       showToast(err.message || '收不進素材庫')
     }
     if (assetPanel && !assetPanel.hidden) drawAssets()
+  }
+
+  // --- 上網找圖 ---
+  // 只有 server 能在視窗裡放一塊網頁（/__decks 的 canBrowse）才有；入口是素材庫裡的「上網找圖」。
+  // 網頁那一塊蓋在文字那一半上（預覽和素材庫都還看得到），由 server 畫，這裡只告訴它位置、
+  // 要去哪裡（POST /__browse），上面那條輸入列是這裡的。圖怎麼拿過來：
+  //   從網頁把圖拖到投影片或素材庫（上面那個 drop 接）；或在圖上按右鍵（server 發 simppt:picture）
+  let canBrowse = false
+  let browseBar = null
+  let browseTimer = null
+  let browsePlaced = ''
+  const BROWSE_BAR_H = 48
+  const tellBrowser = (body) => fetch('/__browse', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders() }, body: JSON.stringify(body) })
+    .then((res) => res.json()).catch(() => null)
+  const browseOpen = () => Boolean(browseBar && !browseBar.hidden)
+  // 網頁那一塊該在哪：文字那一半、輸入列底下。有東西要蓋在它上面（對話框、圖卡工具）就先藏起來
+  const browseRect = () => {
+    const covered = dialogOpen() || (cardBox && !cardBox.hidden) || editor.hidden || !stage.hidden
+    if (covered) return null
+    const box = edText.getBoundingClientRect()
+    return { x: Math.round(box.left), y: Math.round(box.top + BROWSE_BAR_H), width: Math.round(box.width), height: Math.round(box.height - BROWSE_BAR_H) }
+  }
+  const placeBrowser = () => {
+    if (!browseOpen()) return
+    if (editor.hidden) {
+      closeBrowser()
+      return
+    }
+    browseBar.style.left = edText.offsetLeft + 'px'
+    browseBar.style.width = edText.offsetWidth + 'px'
+    const rect = browseRect()
+    const key = JSON.stringify(rect)
+    if (key === browsePlaced) return
+    browsePlaced = key
+    tellBrowser({ rect })
+  }
+  const closeBrowser = () => {
+    if (!browseBar) return
+    browseBar.hidden = true
+    clearInterval(browseTimer)
+    browsePlaced = ''
+    tellBrowser({ close: true })
+  }
+  const openBrowser = async () => {
+    if (!browseBar) {
+      browseBar = document.createElement('form')
+      browseBar.id = 'browse-bar'
+      const back = document.createElement('button')
+      back.type = 'button'
+      back.className = 'btn btn-ghost btn-icon'
+      back.title = '上一頁'
+      back.append(icon('i-arrow-left'))
+      back.addEventListener('click', () => tellBrowser({ back: true }))
+      const box = document.createElement('input')
+      box.type = 'text'
+      box.className = 'field'
+      box.placeholder = '想找什麼圖？打字按 Enter（也可以貼網址）。看到圖就拖到投影片，或在圖上按右鍵'
+      const done = document.createElement('button')
+      done.type = 'button'
+      done.className = 'btn'
+      done.textContent = '回文字'
+      done.addEventListener('click', closeBrowser)
+      browseBar.append(back, box, done)
+      browseBar.addEventListener('submit', (e) => {
+        e.preventDefault()
+        tellBrowser({ go: box.value })
+      })
+      document.getElementById('editor-body').append(browseBar)
+    }
+    browseBar.hidden = false
+    browsePlaced = ''
+    const answer = await tellBrowser({ open: true, rect: browseRect() })
+    if (!answer || !answer.open) {
+      browseBar.hidden = true
+      showToast('找圖的網頁打不開')
+      return
+    }
+    clearInterval(browseTimer)
+    browseTimer = setInterval(placeBrowser, 250)
+    placeBrowser()
+    browseBar.querySelector('input').focus()
+  }
+  // 在找圖的網頁裡對一張圖按了右鍵：收下、放進這一頁
+  window.addEventListener('simppt:picture', (e) => {
+    const url = e.detail && e.detail.url
+    if (hasAssets && !editor.hidden && typeof url === 'string') takePictures([url])
   })
 
   edPreviewBox.addEventListener('mousedown', (e) => {
@@ -4177,6 +4287,7 @@ const SaveLogic = (() => {
       canMakeCards = json.canMakeCards === true
       hasAssets = json.hasAssets === true
       canCutOut = json.canCutOut === true
+      canBrowse = json.canBrowse === true
       if (hasAssets) addImageBtn.title = '加圖片：打開素材庫（常用的圖），或從電腦選'
       deckList.replaceChildren(...json.decks.map(deckRow))
       deckEmpty.hidden = json.decks.length > 0

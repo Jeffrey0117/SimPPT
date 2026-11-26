@@ -56,6 +56,11 @@
 - 用一張圖＝把它抓回來再走 `uploadImage`（變成簡報自己的圖），所以簡報不會指到素材庫裡的檔
 - 拖進編輯區的圖由 `editor` 上的 `drop` 接走（`draggedPictures`）；不是圖就不攔，照舊交給 document 那個開簡報的 drop
 
+## 上網找圖
+
+- 只在 `/__decks` 回 `canBrowse: true` 時才有（DukPPT 有）：素材庫多一格「上網找圖」。網頁那一塊是 server 疊在視窗上的，不在這個頁面裡；這裡只有 `#browse-bar`（輸入列），並且每 250ms 用 `placeBrowser` 把「文字那一半現在在哪」告訴 server（`POST /__browse {rect}`；對話框或圖卡工具開著時送 `null` 讓它先藏起來，不然會蓋住）
+- 圖進來的兩條路：拖進來（`editor` 的 drop → `takePictures`），或 server 發 `simppt:picture` 事件（在那塊網頁裡對圖按右鍵）
+
 ## 去背
 
 - 只在 `/__decks` 回 `canCutOut: true` 時才有（DukPPT 有）：`cutOut(blob)` 第一次用才 `import('/__cutout/cutout.js')`，先試顯示卡（`device: 'gpu', model: 'isnet'`），丟錯才退回一般算法。別換成 `isnet_fp16` 配 gpu——不會丟錯但整張變透明（2026-11-26 試過）
