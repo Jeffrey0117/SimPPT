@@ -422,6 +422,10 @@
   }
   #ed-split:is(:hover, :focus-visible, .dragging)::after { background: var(--color-accent); }
   #ed-split:focus { outline: none; }
+  /* 文字和預覽左右交換（Ctrl+\）：預覽在左、文字在右 */
+  #editor-body.swapped { flex-direction: row-reverse; }
+  #editor-body.swapped #ed-preview { border-left: 0; border-right: 1px solid var(--color-rule); }
+  #editor-body.swapped :is(#txt-tools, #find-bar) { left: calc(max(var(--ed-preview-w, 44%), 320px) + var(--space-8)); }
   body.splitting { cursor: col-resize; user-select: none; }
   body.splitting :is(#ed-text, #ed-preview) { pointer-events: none; }
   .mini-tools {
@@ -4419,6 +4423,8 @@ const SaveLogic = (() => {
   })
   edText.addEventListener('click', () => updatePreview(true))
 
+  // 文字和預覽左右交換（Ctrl+\），下次開還記得
+  let swapSides = () => {}
   // 文字與預覽中間的分隔線：拖曳改預覽寬度（存成比例，視窗大小變了也維持），雙擊還原
   {
     const split = document.getElementById('ed-split')
@@ -4426,6 +4432,17 @@ const SaveLogic = (() => {
     const SPLIT_KEY = 'simppt-split'
     const MIN_PREVIEW = 320
     const MIN_TEXT = 260
+    const SWAP_KEY = 'simppt-swap'
+    let swapped = false
+    try { swapped = localStorage.getItem(SWAP_KEY) === '1' } catch { /* 讀不到就照預設 */ }
+    body.classList.toggle('swapped', swapped)
+    swapSides = () => {
+      swapped = !swapped
+      body.classList.toggle('swapped', swapped)
+      try { localStorage.setItem(SWAP_KEY, swapped ? '1' : '0') } catch { /* 存不了就只是下次不記得 */ }
+      fitPreview()
+      updatePreview()
+    }
     const applySplit = (ratio) => {
       if (ratio == null) body.style.removeProperty('--ed-preview-w')
       else body.style.setProperty('--ed-preview-w', `${(ratio * 100).toFixed(2)}%`)
@@ -4437,7 +4454,7 @@ const SaveLogic = (() => {
     const ratioAt = (clientX) => {
       const box = body.getBoundingClientRect()
       const max = Math.max(MIN_PREVIEW, box.width - MIN_TEXT)
-      const width = Math.min(max, Math.max(MIN_PREVIEW, box.right - clientX))
+      const width = Math.min(max, Math.max(MIN_PREVIEW, swapped ? clientX - box.left : box.right - clientX))
       return width / box.width
     }
     const remember = (ratio) => {
@@ -4482,7 +4499,7 @@ const SaveLogic = (() => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
       e.preventDefault()
       const box = document.getElementById('ed-preview').getBoundingClientRect()
-      current = ratioAt(box.left + (e.key === 'ArrowLeft' ? -24 : 24))
+      current = ratioAt((swapped ? box.right : box.left) + (e.key === 'ArrowLeft' ? -24 : 24))
       applySplit(current)
       remember(current)
     })
@@ -4509,6 +4526,7 @@ const SaveLogic = (() => {
       ['存檔', ['Ctrl', 'S']],
       ['從這一頁播放', ['Ctrl', 'Enter']],
       ['搜尋並取代', ['Ctrl', 'H']],
+      ['文字和預覽左右交換', ['Ctrl', '\\']],
       ['這張快捷鍵表', ['Ctrl', '/']],
     ] },
     { title: '頁面', rows: [
@@ -4637,6 +4655,9 @@ const SaveLogic = (() => {
     } else if (e.code === 'Enter' || e.key === 'Enter') {
       e.preventDefault()
       playFromEditor()
+    } else if (e.code === 'Backslash') {
+      e.preventDefault()
+      swapSides()
     } else if (e.code === 'KeyB' && document.activeElement === edText) {
       e.preventDefault()
       inlineBold()

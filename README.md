@@ -218,6 +218,7 @@ editDeck(root, deck, (text) => insertSlides(text, 3, '--- layout=big\n\n# 87%\n\
 |---|---|
 | `Ctrl+S` | 存檔 |
 | `Ctrl+Enter` | 從這一頁播放 |
+| `Ctrl+\` | 文字和預覽左右交換（會記住） |
 | `Ctrl+↑` `Ctrl+↓` | 上一頁 / 下一頁 |
 | `Ctrl+D` | 複製這一頁 |
 | `Ctrl+M` | 在後面新增一頁 |
