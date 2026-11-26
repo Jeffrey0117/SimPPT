@@ -30,6 +30,13 @@
 - `findDeck`：有斜線的就是「那個檔」，而且只收 `decks/` 底下的；沒斜線才用名字比對。專案裡其他 `.md`（README、CLAUDE.md）不是簡報，不能從這裡改
 - AI 回答外面包的 ``` 只在 `/__insert` 剝（`stripFence`），parser 不剝 — 不然內容就是一段程式碼的頁，讀出來再寫回去會壞掉
 
+## AI 邊寫邊出現
+
+- `lib/run-claude.mjs` 的 `runClaudeStream` 用 `claude -p --output-format stream-json --include-partial-messages`，一段一段把字交出來；`streamAnswer` 把它變成一行一個 JSON（`delta`…最後一行 `done`）。頁面的請求帶 `Accept: application/x-ndjson` 才走這條，否則照舊一次回完
+- 頁面那半在 `beginAiLive`／`drawAiLive`／`endAiLive`：寫的期間 `#ai-live` 蓋住整個畫面、`aiLive` 不是 null（`dialogOpen()` 也算它），編輯器只是拿來顯示。**結束時一律先把編輯器還原成 AI 動手前的樣子**，再照原本的路（`enterEditor`／`commitPageOp`）正式放結果，所以復原、歷史、未存檔狀態都跟以前一樣
+- 「AI 生成」貼的是 hackmd2 筆記網址時由 `lib/note-source.mjs` 換成筆記內容。它只會去問設定好的那一台 hackmd2，貼什麼網址都一樣
+- DukPPT（桌面版，另一個 repo）直接用這幾個 `lib/*.mjs` 和這份 `index.html`：改了這裡，去 dukppt 跑一次 `npm test` 和 `npm run smoke`
+
 ## 誰可以打 server（別改鬆）
 
 - 檔案路徑一律用 `lib/deck-store.mjs` 的 `insideRoot` 判斷，它看的是檔案在硬碟上真正的位置。只檢查網址或字串裡有沒有「.」開頭是不夠的：Windows 上 `.git` 也叫 `GIT~1`，2026-11-14 之前 `/GIT~1/config` 拿得到 git 設定

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildGeneratePrompt, buildRevisePrompt, buildInsertPrompt, stripFence } from './lib/generate-prompt.mjs'
 import { runClaudePrint, streamAnswer, wantsStream } from './lib/run-claude.mjs'
+import { noteConfig, resolveSource } from './lib/note-source.mjs'
 import { writeDeck, listDecks, insideRoot } from './lib/deck-store.mjs'
 import { handleApi } from './lib/api-routes.mjs'
 import { sameSite } from './lib/same-site.mjs'
@@ -140,7 +141,16 @@ const server = http.createServer((req, res) => {
           res.end('{"ok":false,"message":"內容過大或空白（上限 200KB）"}')
           return
         }
-        await answerAi(req, res, buildGeneratePrompt(buf.toString('utf8')))
+        // Pasted text is used as it is; the address of a hackmd2 note is swapped for the note's text.
+        let source
+        try {
+          source = await resolveSource(buf.toString('utf8'), noteConfig(process.env))
+        } catch (err) {
+          res.writeHead(502, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, message: err.code === 'ENOTE' ? err.message : '讀不到那篇筆記' }))
+          return
+        }
+        await answerAi(req, res, buildGeneratePrompt(source))
       })
       return
     }
