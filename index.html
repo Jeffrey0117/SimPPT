@@ -2727,14 +2727,20 @@ const SaveLogic = (() => {
     e.stopPropagation()
   }, true)
 
+  // 上一次畫縮圖列時的樣子；別處把 edStrip.dataset.key 清空＝要求強制重畫
+  let edStripKey = ''
   const updateEdStrip = (deck) => {
-    const key = `${previewIdx}:${deck.slides.length}:${edPreviewBox.clientWidth}`
-    if (edStrip.dataset.key === key) return
-    edStrip.dataset.key = key
-    edStrip.innerHTML = ''
+    if (edStrip.dataset.key === '') edStripKey = ''
     const total = deck.slides.length
+    const { from, count } = total < 2 ? { from: 0, count: 0 } : stripWindow(total, previewIdx)
+    // 縮圖要不要重畫：頁數、位置、寬度變了，或是看得到的那幾頁內容（含配色、版型）變了
+    const shown = JSON.stringify([deck.globals, deck.slides.slice(from, from + count).map((slide) => [slide.meta, slide.body])])
+    const key = `${previewIdx}:${total}:${edPreviewBox.clientWidth}:${shown}`
+    if (edStripKey === key) return
+    edStripKey = key
+    edStrip.dataset.key = 'drawn'
+    edStrip.innerHTML = ''
     if (total < 2) return
-    const { from, count } = stripWindow(total, previewIdx)
     const wPx = Math.min(THUMB_MAX, (edPreviewBox.clientWidth - previewPad() * 2 - (count - 1) * STRIP_GAP) / count)
     for (let i = from; i < from + count; i += 1) {
       const thumb = makeThumb(deck, i, wPx, i === previewIdx, jumpEditorToSlide)
