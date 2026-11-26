@@ -703,6 +703,7 @@
   #name-row .field { flex: 1; min-width: 0; height: 38px; font-family: var(--font-mono); }
   #name-row span { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-neutral); }
   .card-error { color: var(--color-danger); font-size: var(--text-sm); min-height: 1.4em; }
+  .card-error.waiting { color: var(--color-neutral); }
   .card-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
   .card-actions .btn { height: 38px; padding: 0 var(--space-4); }
   #name-overwrite { margin-right: auto; padding: 0 var(--space-2); color: var(--color-danger); }
@@ -3834,7 +3835,28 @@ const SaveLogic = (() => {
   edAiReviseBtn.addEventListener('click', () => openGenModal('revise'))
   edAiInsertBtn.addEventListener('click', () => openGenModal('insert'))
 
+  // 等 AI 的時候：按鈕上數秒、下面一行說現在在幹嘛，取消是真的取消
+  let genAbort = null
+  let genTicker = null
+  const GEN_WAIT_NOTE = '本機的 claude 正在寫，通常半分鐘到一分鐘，寫好會直接打開。不想等就按取消。'
+  const startGenWait = (busy) => {
+    const began = Date.now()
+    const tick = () => { genSubmitBtn.textContent = `${busy} ${Math.floor((Date.now() - began) / 1000)} 秒` }
+    genSubmitBtn.textContent = busy
+    genError.textContent = GEN_WAIT_NOTE
+    genError.classList.add('waiting')
+    genText.readOnly = true
+    genTicker = setInterval(tick, 1000)
+  }
+  const stopGenWait = () => {
+    clearInterval(genTicker)
+    genError.classList.remove('waiting')
+    if (genError.textContent === GEN_WAIT_NOTE) genError.textContent = ''
+    genText.readOnly = false
+  }
+
   genCancelBtn.addEventListener('click', () => {
+    if (genAbort) genAbort.abort()
     genModal.hidden = true
   })
 
@@ -3870,17 +3892,18 @@ const SaveLogic = (() => {
       return
     }
     genSubmitBtn.disabled = true
-    genCancelBtn.disabled = true
-    genSubmitBtn.textContent = GEN_MODES[genMode].busy
-    genError.textContent = ''
+    startGenWait(GEN_MODES[genMode].busy)
+    genAbort = new AbortController()
     try {
       const request = GEN_REQUESTS[genMode](content)
       const res = await fetch(request.url, {
         method: 'POST',
+        signal: genAbort.signal,
         headers: { ...request.headers, ...apiHeaders() },
         body: request.body,
       })
       const data = await res.json()
+      stopGenWait()
       if (!res.ok || !data.ok) {
         genError.textContent = data.message || `失敗（${res.status}）`
         return
@@ -3907,10 +3930,13 @@ const SaveLogic = (() => {
       // AI 給的內容還沒寫進任何檔案 — enterEditor 會拿它跟 cleanText 比，標成有未存的變更
       enterEditor(data.markdown, { keepHistory: genMode === 'revise' })
     } catch (err) {
-      genError.textContent = `連線失敗：${err.message}`
+      stopGenWait()
+      // 自己按的取消不是錯誤
+      if (!err || err.name !== 'AbortError') genError.textContent = `連線失敗：${err.message}`
     } finally {
+      stopGenWait()
+      genAbort = null
       genSubmitBtn.disabled = false
-      genCancelBtn.disabled = false
       genSubmitBtn.textContent = GEN_MODES[genMode].submit
     }
   })
