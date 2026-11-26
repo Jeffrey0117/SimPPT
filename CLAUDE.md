@@ -45,8 +45,9 @@
 
 ## 製作圖卡
 
-- 版型面板多一格「製作圖卡」，只在 `/__decks` 回 `canMakeCards: true` 時出現。按了就一直問 `POST /__card`（等到下一張圖卡做好才回 `{ ok, url }`；視窗關了回 `{ ok: false, closed: true }`），每拿到一張就在目前這頁後面加一頁 `![](url){x=0 y=0 w=100}`（整頁滿版）
-- 這個 server 沒有 `/__card`——只有 DukPPT 有（它開 FreeForCut 的視窗、把輸出的檔存到簡報旁邊的 `img/`）
+- 版型面板多一格「製作圖卡」，只在 `/__decks` 回 `canMakeCards: true` 時出現。按了就在編輯區上蓋一個 iframe（`/__cards/`，是打包好的 FreeForCut＝clipcraft），所以要同一個網域
+- 工具輸出的方式是 `<a download>.click()`：`takeCardExports` 把 iframe 裡的那個 click 換掉，檔案走 `uploadImage`（跟貼上圖片同一條路），然後在目前這頁後面加一頁 `![](url){x=0 y=0 w=100}`（整頁滿版）
+- 這個 server 沒有 `/__cards/`——只有 DukPPT 帶著（它的 `scripts/vendor.js` 把 clipcraft 打包進去）
 
 ## 誰可以打 server（別改鬆）
 

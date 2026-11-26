@@ -481,6 +481,11 @@
   .preset svg { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--color-well); color: var(--color-neutral); }
   .preset:hover svg { color: var(--color-muted); }
   .preset svg .hot { fill: var(--color-accent); }
+  /* 製作圖卡：工具蓋在編輯區上 */
+  #card-maker { position: absolute; inset: 0; z-index: 40; display: flex; background: var(--color-paper); }
+  #card-maker[hidden] { display: none; }
+  #card-maker iframe { flex: 1; width: 100%; border: 0; }
+  #card-maker-close { position: absolute; top: var(--space-3); right: var(--space-5); }
   #preset-layouts.with-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   @media (max-width: 640px) { #preset-layouts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   #ed-viewport {
@@ -3593,39 +3598,68 @@ const SaveLogic = (() => {
   }
 
   // --- 製作圖卡 ---
-  // 版型面板的最後一格。只有 server 說它有圖卡工具（/__decks 的 canMakeCards）才出現。
-  // 按下去 server 會開圖卡工具的視窗；那邊每輸出一張，這裡就在目前這頁後面加一頁、整頁就是那張卡。
-  // /__card 會等到下一張做好才回答，所以一張一張問，問到視窗關掉為止。
+  // 版型面板的最後一格。只有 server 帶著圖卡工具（/__decks 的 canMakeCards，工具放在 /__cards/）才出現。
+  // 按下去，圖卡工具就蓋在編輯區上（同一個視窗裡的 iframe）。它每「下載」一張，這裡就攔下來：
+  // 存成簡報的圖（跟貼上圖片同一條路），在目前這頁後面加一頁、整頁就是那張卡，然後收起工具。
   let canMakeCards = false
-  let makingCards = false
+  let cardBox = null
+  let cardQueue = Promise.resolve()
   const CARD_ART = '<rect x="4" y="4" width="40" height="19" rx="1.5" opacity="0.45"/><rect class="hot" x="10" y="10" width="28" height="4"/><rect x="15" y="16.5" width="18" height="1.5"/>'
-  const askCard = (body) => fetch('/__card', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders() }, body: JSON.stringify(body) })
-  const makeCards = async () => {
-    if (makingCards) {
-      askCard({ focus: true }).catch(() => {})
-      return
-    }
-    makingCards = true
-    setStatus('圖卡視窗開著：做好按輸出，就會加成一頁')
-    try {
-      for (;;) {
-        const res = await askCard({})
-        const json = await res.json().catch(() => null)
-        if (!res.ok || !json || !json.ok) {
-          if (json && json.message) showToast(json.message)
-          break
-        }
-        if (editor.hidden) break
-        const before = { text: edText.value, index: previewIdx }
-        const out = SimpptParser.insertSlideAfter(before.text, previewIdx, '', '![](' + json.url + '){x=0 y=0 w=100}')
-        commitPageOp(before, out, '已加入圖卡')
-      }
-    } catch (err) {
-      showToast('圖卡工具沒有回應')
-    } finally {
-      makingCards = false
-    }
+  const CARD_START = '/__cards/impact'
+  // 工具自己的招牌和回它首頁的連結，在這裡用不到
+  const CARD_HIDE = '.side-brand, .gh-star, .side-nav > .nav-item:first-child { display: none !important; }'
+  const closeCardMaker = () => {
+    if (cardBox) cardBox.hidden = true
   }
+  const addCardPage = async (blob, name) => {
+    const json = await uploadImage(new File([blob], name, { type: blob.type }))
+    const url = json && json.data && json.data.url_direct
+    if (!url) throw new Error('no url')
+    const before = { text: edText.value, index: previewIdx }
+    const out = SimpptParser.insertSlideAfter(before.text, previewIdx, '', '![](' + url + '){x=0 y=0 w=100}')
+    commitPageOp(before, out, '已加入圖卡')
+  }
+  // 工具輸出的方式是做一個 <a download> 然後 click()：把那個 click 換成「加進簡報」
+  const takeCardExports = (frame) => {
+    const inner = frame.contentWindow
+    const realClick = inner.HTMLAnchorElement.prototype.click
+    inner.HTMLAnchorElement.prototype.click = function () {
+      if (!this.hasAttribute('download')) return realClick.call(this)
+      const name = this.download || 'card.png'
+      // 現在就去拿：工具可能一 click 完就把這個網址作廢
+      const got = inner.fetch(this.href).then((res) => res.blob())
+      closeCardMaker()
+      setStatus('圖卡加入中…')
+      cardQueue = cardQueue.then(async () => addCardPage(await got, name)).catch(() => showToast('這張圖卡沒有加進來'))
+    }
+    const style = inner.document.createElement('style')
+    style.textContent = CARD_HIDE
+    inner.document.head.append(style)
+    inner.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardMaker() })
+  }
+  const openCardMaker = () => {
+    if (!cardBox) {
+      cardBox = document.createElement('div')
+      cardBox.id = 'card-maker'
+      const frame = document.createElement('iframe')
+      frame.title = '製作圖卡'
+      frame.addEventListener('load', () => takeCardExports(frame))
+      frame.src = CARD_START
+      const back = document.createElement('button')
+      back.type = 'button'
+      back.id = 'card-maker-close'
+      back.className = 'btn'
+      back.textContent = '回簡報'
+      back.title = '不做了，回簡報（Esc）'
+      back.addEventListener('click', closeCardMaker)
+      cardBox.append(frame, back)
+      document.getElementById('editor-body').append(cardBox)
+    }
+    cardBox.hidden = false
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && cardBox && !cardBox.hidden) closeCardMaker()
+  })
   const cardTile = () => {
     const card = document.createElement('button')
     card.type = 'button'
@@ -3634,7 +3668,7 @@ const SaveLogic = (() => {
     card.append('製作圖卡')
     card.addEventListener('click', () => {
       closePresetPanel()
-      makeCards()
+      openCardMaker()
     })
     return card
   }
