@@ -1581,6 +1581,13 @@ const SimpptParser = (() => {
   const VIDEO_FILE_RE = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#]|$)/i
   const YOUTUBE_RE = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[?&#/]|$)/
 
+  // bg 的值是一張圖（網址或檔名，圖片副檔名結尾；url(…) 包著也算）→ 回傳那張圖的位置；是顏色就回 null
+  const BG_IMAGE_RE = /^(?:url\(\s*)?["']?((?:data:image\/[^"')\s]+)|(?:[^"'()]+\.(?:png|jpe?g|gif|webp|avif|svg)(?:[?#][^"')\s]*)?))["']?\s*\)?$/i
+  const bgImage = (value) => {
+    const m = typeof value === 'string' ? value.trim().match(BG_IMAGE_RE) : null
+    return m ? m[1] : null
+  }
+
   const youtubeId = (src) => {
     const found = YOUTUBE_RE.exec(src)
     return found ? found[1] : null
@@ -1630,7 +1637,7 @@ const SimpptParser = (() => {
   }).join('')
 
   return {
-    parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE, mediaLine, appendBlock,
+    parse, renderMarkdown, slideIndexAt, slideLineRange, blocksOf, stripAttrTail, IMG_RE, mediaLine, bgImage, appendBlock,
     setSlideDirectives, insertSlideAfter, duplicateSlide, deleteSlide, moveSlide, moveSlideTo, continueList, blockText, rewriteBlock,
     insertSlidesAfter, replaceSlide,
   }
@@ -1907,6 +1914,14 @@ const SaveLogic = (() => {
     return key ? { key, file: state.fileMap.get(key) } : null
   }
 
+  // 畫一頁的底：bg 是顏色就照舊；是一張圖就鋪滿整頁（等比放大、置中裁切）
+  const paintBg = (el, bg) => {
+    const src = bg ? SimpptParser.bgImage(bg) : null
+    el.style.background = src
+      ? '#000 url("' + resolveSrc(src).replace(/["\\\n\r]/g, (c) => encodeURIComponent(c)) + '") center / cover no-repeat'
+      : (bg || DEFAULT_BG)
+  }
+
   const resolveSrc = (src) => {
     if (/^(https?:|data:|blob:)/i.test(src)) return src
     const mdDir = state.mdPath.includes('/')
@@ -2109,7 +2124,7 @@ const SaveLogic = (() => {
     const meta = { ...state.deck.globals, ...slide.meta }
     stage.style.background = '#000'
     stage.style.color = meta.color || DEFAULT_COLOR
-    stageFrame.style.background = meta.bg || DEFAULT_BG
+    paintBg(stageFrame, meta.bg)
     stageFrame.style.color = meta.color || DEFAULT_COLOR
     stageFrame.style.setProperty('--accent', meta.accent || 'inherit')
     content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
@@ -2563,7 +2578,7 @@ const SaveLogic = (() => {
     const idx = previewIdx
     const slide = deck.slides[idx] || { meta: {}, body: '' }
     const meta = { ...deck.globals, ...slide.meta }
-    edFrame.style.background = meta.bg || DEFAULT_BG
+    paintBg(edFrame, meta.bg)
     edFrame.style.color = meta.color || DEFAULT_COLOR
     edFrame.style.setProperty('--accent', meta.accent || 'inherit')
     edContent.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)
@@ -4475,8 +4490,15 @@ const SaveLogic = (() => {
     e.preventDefault()
     const file = imageItem.getAsFile()
     if (!file) return
-    const placeholder = `![上傳中…${Date.now() % 100000}]()`
-    edText.setRangeText(`\n${placeholder}\n`, edText.selectionStart, edText.selectionEnd, 'end')
+    // 游標在「bg:」那一行貼圖 → 這張圖就是背景（換掉那一行的值），不是插進頁面裡
+    const caret = edText.selectionStart
+    const lineFrom = edText.value.lastIndexOf('\n', caret - 1) + 1
+    const lineEnd = edText.value.indexOf('\n', caret)
+    const lineTo = lineEnd < 0 ? edText.value.length : lineEnd
+    const bgLine = edText.value.slice(lineFrom, lineTo).match(/^\s*bg\s*:\s*/)
+    const placeholder = bgLine ? `上傳中…${Date.now() % 100000}` : `![上傳中…${Date.now() % 100000}]()`
+    if (bgLine) edText.setRangeText(placeholder, lineFrom + bgLine[0].length, lineTo, 'end')
+    else edText.setRangeText(`\n${placeholder}\n`, edText.selectionStart, edText.selectionEnd, 'end')
     edDirty = true
     setStatus('圖片上傳中…')
     updatePreview(true)
@@ -4490,10 +4512,10 @@ const SaveLogic = (() => {
       const json = await uploadImage(file)
       const url = json && json.data && json.data.url_direct
       if (!url) throw new Error((json && json.message) || 'no url')
-      replaceKeepCaret(placeholder, `![](${url})`)
-      setStatus('圖片已上傳', true)
+      replaceKeepCaret(placeholder, bgLine ? url : `![](${url})`)
+      setStatus(bgLine ? '背景圖已換好' : '圖片已上傳', true)
     } catch (err) {
-      replaceKeepCaret(`\n${placeholder}\n`, '')
+      replaceKeepCaret(bgLine ? placeholder : `\n${placeholder}\n`, '')
       showToast('圖片上傳失敗，再試一次或檢查網路')
       setStatus('')
     }
@@ -4875,7 +4897,7 @@ const SaveLogic = (() => {
       return
     }
     const meta = { ...deck.globals, ...slide.meta }
-    frame.style.background = meta.bg || DEFAULT_BG
+    paintBg(frame, meta.bg)
     frame.style.color = meta.color || DEFAULT_COLOR
     frame.style.setProperty('--accent', meta.accent || 'inherit')
     content.innerHTML = SimpptParser.renderMarkdown(slide.body, resolveSrc)

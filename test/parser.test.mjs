@@ -554,6 +554,22 @@ test('ordinary images and look-alike links stay images', () => {
   )
 })
 
+test('bgImage: a bg that names a picture is a picture, a colour is not', () => {
+  const { bgImage } = SimpptParser
+  assert.equal(bgImage('img/bg.png'), 'img/bg.png')
+  assert.equal(bgImage(' https://example.com/a/photo.JPG?x=1 '), 'https://example.com/a/photo.JPG?x=1')
+  assert.equal(bgImage('url("img/bg.webp")'), 'img/bg.webp')
+  assert.equal(bgImage('url(bg.svg)'), 'bg.svg')
+  assert.equal(bgImage('img/my bg pic.png'), 'img/my bg pic.png')
+  assert.equal(bgImage('#1a1a2e'), null)
+  assert.equal(bgImage('linear-gradient(#000, #333)'), null)
+  assert.equal(bgImage('rebeccapurple'), null)
+  assert.equal(bgImage(undefined), null)
+  const deck = SimpptParser.parse('---\nbg: img/bg.png\n---\n\n# A\n\n--- bg=#fff\n\n# B\n', { keepEmpty: true })
+  assert.equal(bgImage({ ...deck.globals, ...deck.slides[0].meta }.bg), 'img/bg.png')
+  assert.equal(bgImage({ ...deck.globals, ...deck.slides[1].meta }.bg), null)
+})
+
 test('mediaLine turns a pasted video link into an image line, and nothing else', () => {
   const { mediaLine } = SimpptParser
   assert.equal(mediaLine(' https://youtu.be/dQw4w9WgXcQ \n'), '![](https://youtu.be/dQw4w9WgXcQ)')
