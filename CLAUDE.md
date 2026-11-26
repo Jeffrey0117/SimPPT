@@ -56,6 +56,11 @@
 - 用一張圖＝把它抓回來再走 `uploadImage`（變成簡報自己的圖），所以簡報不會指到素材庫裡的檔
 - 拖進編輯區的圖由 `editor` 上的 `drop` 接走（`draggedPictures`）；不是圖就不攔，照舊交給 document 那個開簡報的 drop
 
+## 去背
+
+- 只在 `/__decks` 回 `canCutOut: true` 時才有（DukPPT 有）：`cutOut(blob)` 第一次用才 `import('/__cutout/cutout.js')`，先試顯示卡（`device: 'gpu', model: 'isnet'`），丟錯才退回一般算法。別換成 `isnet_fp16` 配 gpu——不會丟錯但整張變透明（2026-11-26 試過）
+- 三個入口：選到圖片時 `#tool-cutout`、素材庫的圖按右鍵、按著 Alt 拖圖進來。結果一律是新檔，原圖不動
+
 ## 誰可以打 server（別改鬆）
 
 - 檔案路徑一律用 `lib/deck-store.mjs` 的 `insideRoot` 判斷，它看的是檔案在硬碟上真正的位置。只檢查網址或字串裡有沒有「.」開頭是不夠的：Windows 上 `.git` 也叫 `GIT~1`，2026-11-14 之前 `/GIT~1/config` 拿得到 git 設定

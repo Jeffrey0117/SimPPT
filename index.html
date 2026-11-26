@@ -943,6 +943,7 @@
         <span class="swatch" data-c="#f4b860" style="background:#f4b860"></span>
         <span class="swatch" data-c="#6c9ef8" style="background:#6c9ef8"></span>
         <input type="color" id="tool-color" title="自訂顏色">
+        <button class="btn" data-act="cutout" id="tool-cutout" hidden title="把選取的圖片去背（在這台電腦上算，原圖還在）">去背</button>
         <button class="btn" data-act="dist" title="把選取的區塊上下等距排列（Shift 點選多個）">等距</button>
         <button class="btn" data-act="clear" title="清掉選取區塊的樣式改動">清除</button>
       </div>
@@ -3106,6 +3107,53 @@ const SaveLogic = (() => {
       if (previewBlocks[k]) previewBlocks[k].classList.add('block-selected')
     }
     edTools.hidden = selectedKs.size === 0
+    // 「去背」只在選到圖片、而且這裡有去背工具時才出現
+    toolCutout.hidden = !canCutOut || selectedImages().length === 0
+  }
+
+  // --- 去背 ---
+  // 只有 server 帶著去背工具（/__decks 的 canCutOut，工具是 /__cutout/cutout.js）才有。
+  // 在這台電腦上算，不上傳；第一次用要下載模型。先用顯示卡，不行再用一般的算法（慢很多）。
+  let canCutOut = false
+  let cutoutTool = null
+  const toolCutout = document.getElementById('tool-cutout')
+  const cutOut = async (blob) => {
+    if (!cutoutTool) cutoutTool = await import('/__cutout/cutout.js')
+    try {
+      return await cutoutTool.removeBackground(blob, { device: 'gpu', model: 'isnet' })
+    } catch (err) {
+      return cutoutTool.removeBackground(blob)
+    }
+  }
+  const selectedImages = () => [...selectedKs].filter((k) => {
+    const found = currentBlock(k)
+    return Boolean(found && found.block.type === 'img' && !/youtu\.?be|\.(mp4|webm|mov|m4v|ogv)([?#]|$)/i.test(found.block.src || ''))
+  })
+  // 把選到的圖換成去背後的版本（新檔，原圖還在；按上一動就回來）
+  const cutOutSelected = async () => {
+    const ks = selectedImages()
+    if (ks.length === 0) return
+    setStatus('去背中…第一次要下載模型，會久一點')
+    try {
+      for (const k of ks) {
+        const found = currentBlock(k)
+        if (!found) continue
+        const src = found.block.src
+        const original = await (await fetch(resolveSrc(src))).blob()
+        const json = await uploadImage(new File([await cutOut(original)], 'cutout.png', { type: 'image/png' }))
+        const url = json && json.data && json.data.url_direct
+        if (!url) throw new Error('no url')
+        const now = currentBlock(k)
+        if (!now || now.block.src !== src) continue
+        const li = now.ctx.lead + now.block.start
+        const next = now.ctx.lines[li].replace(`](${src})`, `](${url})`)
+        setEditorText([...now.ctx.lines.slice(0, li), next, ...now.ctx.lines.slice(li + 1)])
+      }
+      setStatus('去背好了', true)
+    } catch (err) {
+      setStatus('')
+      showToast('這張圖去背沒有成功')
+    }
   }
 
   const deselectBlock = () => {
@@ -3364,6 +3412,22 @@ const SaveLogic = (() => {
     }
     tile.append(pic)
     tile.addEventListener('click', () => useAsset(item))
+    // 右鍵：去背，去好的那張另外收一份（原圖留著）
+    tile.addEventListener('contextmenu', async (e) => {
+      e.preventDefault()
+      if (!canCutOut || isVideo) return
+      setStatus('去背中…第一次要下載模型，會久一點')
+      try {
+        const original = await (await fetch(item.url, { headers: apiHeaders() })).blob()
+        const name = item.name.replace(/\.[^.]*$/, '') + '-去背.png'
+        await keepAsset(new File([await cutOut(original)], name, { type: 'image/png' }))
+        setStatus('去背好了，收在素材庫', true)
+        drawAssets()
+      } catch (err) {
+        setStatus('')
+        showToast('這張圖去背沒有成功')
+      }
+    })
     return tile
   }
   const pickTile = () => {
@@ -3392,7 +3456,9 @@ const SaveLogic = (() => {
       assetPanel = document.createElement('div')
       assetPanel.id = 'asset-panel'
       const hint = document.createElement('p')
-      hint.textContent = '素材庫：把圖拖進來就收著。點一下放進這一頁，滑鼠停著按 Delete 拿掉。'
+      hint.textContent = canCutOut
+        ? '素材庫：把圖拖進來就收著（按著 Alt 拖＝先去背）。點一下放進這一頁，右鍵去背，滑鼠停著按 Delete 拿掉。'
+        : '素材庫：把圖拖進來就收著。點一下放進這一頁，滑鼠停著按 Delete 拿掉。'
       assetPanel.append(hint, assetGrid)
       edPreviewBox.append(assetPanel)
     }
@@ -3455,11 +3521,19 @@ const SaveLogic = (() => {
     e.stopPropagation()
     document.body.classList.remove('dragover')
     const onlyKeep = Boolean(assetPanel && !assetPanel.hidden && assetPanel.contains(e.target))
+    // 按著 Alt 拖進來：先去背再收（一抓就是去背）
+    const cutFirst = canCutOut && e.altKey
     try {
       const inline = src.startsWith('data:') ? await (await fetch(src)).blob() : null
       const pictures = inline ? [new File([inline], 'picture', { type: inline.type })] : (src ? [src] : files)
+      if (cutFirst) setStatus('去背中…第一次要下載模型，會久一點')
       for (const picture of pictures) {
-        const kept = await keepAsset(picture)
+        let kept = await keepAsset(picture)
+        if (cutFirst && !/\.(webm|mp4)$/i.test(kept.name)) {
+          const original = await (await fetch(kept.url, { headers: apiHeaders() })).blob()
+          const name = kept.name.replace(/\.[^.]*$/, '') + '-去背.png'
+          kept = await keepAsset(new File([await cutOut(original)], name, { type: 'image/png' }))
+        }
         if (!onlyKeep) await useAsset(kept)
       }
       showToast(onlyKeep ? '收進素材庫了' : '放進這一頁，也收進素材庫了')
@@ -3614,6 +3688,7 @@ const SaveLogic = (() => {
     else if (btn.dataset.act === 'smaller') adjustSize(-10)
     else if (btn.dataset.act === 'bold') toggleBold()
     else if (btn.dataset.act === 'dist') distributeVertically()
+    else if (btn.dataset.act === 'cutout') cutOutSelected()
     else if (btn.dataset.act === 'clear') {
       for (const k of allSelected()) writeBlockAttrs(k, null)
     }
@@ -4101,6 +4176,7 @@ const SaveLogic = (() => {
       canDeleteDecks = json.canDelete === true
       canMakeCards = json.canMakeCards === true
       hasAssets = json.hasAssets === true
+      canCutOut = json.canCutOut === true
       if (hasAssets) addImageBtn.title = '加圖片：打開素材庫（常用的圖），或從電腦選'
       deckList.replaceChildren(...json.decks.map(deckRow))
       deckEmpty.hidden = json.decks.length > 0
