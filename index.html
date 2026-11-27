@@ -742,6 +742,10 @@
     border: 1px solid var(--color-rule-2); border-radius: var(--radius-m);
     padding: var(--space-3); font: inherit; font-size: var(--text-md); line-height: 1.6;
   }
+  #gen-styles { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-neutral); }
+  #gen-styles[hidden] { display: none; }
+  #gen-styles button { height: 28px; padding: 0 var(--space-3); font: inherit; color: var(--color-muted); background: none; border: 1px solid var(--color-rule-2); border-radius: 999px; cursor: pointer; }
+  #gen-styles button.on { color: var(--color-ink); border-color: var(--color-accent); }
   #name-row { display: flex; align-items: center; gap: var(--space-2); }
   #name-row .field { flex: 1; min-width: 0; height: 38px; font-family: var(--font-mono); }
   #name-row span { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-neutral); }
@@ -847,6 +851,7 @@
   <div id="gen-card" class="card">
     <h2 id="gen-title">AI 生成簡報</h2>
     <textarea id="gen-text" placeholder="貼上你想做成簡報的內容…"></textarea>
+    <div id="gen-styles" hidden></div>
     <div id="gen-error" class="card-error"></div>
     <div id="gen-actions" class="card-actions">
       <button id="gen-cancel" class="btn btn-ghost">取消</button>
@@ -3442,9 +3447,7 @@ const SaveLogic = (() => {
     tile.append(pic)
     tile.addEventListener('click', () => useAsset(item))
     // 右鍵：去背，去好的那張另外收一份（原圖留著）
-    tile.addEventListener('contextmenu', async (e) => {
-      e.preventDefault()
-      if (!canCutOut || isVideo) return
+    const cutOutTile = async () => {
       setStatus('去背中…第一次要下載模型，會久一點')
       try {
         const original = await (await fetch(item.url, { headers: apiHeaders() })).blob()
@@ -3456,6 +3459,15 @@ const SaveLogic = (() => {
         setStatus('')
         showToast('這張圖去背沒有成功')
       }
+    }
+    tile.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      if (isVideo) return
+      const items = [
+        ...(canCutOut ? [menuItem('i-eraser', '去背', cutOutTile)] : []),
+        ...(hasMemes ? [menuItem('i-folder', '收進梗圖', () => keepMeme(item.name))] : []),
+      ]
+      if (items.length) openMenuAt(e, items)
     })
     return tile
   }
@@ -3534,6 +3546,14 @@ const SaveLogic = (() => {
     })
     return item
   }
+  // 在滑鼠的位置打開這個小選單（先顯示才量得到大小，再把它收進視窗裡）
+  const openMenuAt = (e, items) => {
+    blockMenu.replaceChildren(...items)
+    blockMenu.hidden = false
+    const size = blockMenu.getBoundingClientRect()
+    blockMenu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - size.width - 8)) + 'px'
+    blockMenu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - size.height - 8)) + 'px'
+  }
   // 把頁面上的一張圖收進素材庫
   const keepBlockImage = async (k) => {
     const found = currentBlock(k)
@@ -3578,12 +3598,7 @@ const SaveLogic = (() => {
     placeAt = block ? null : { x: ((e.clientX - box.left) / box.width) * 100, y: ((e.clientY - box.top) / box.height) * 100 }
     if (block) selectBlock(block, k, false)
     else deselectBlock()
-    blockMenu.replaceChildren(...blockMenuItems(block, k))
-    blockMenu.hidden = false
-    // 先顯示才量得到大小，再把它收進視窗裡
-    const size = blockMenu.getBoundingClientRect()
-    blockMenu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - size.width - 8)) + 'px'
-    blockMenu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - size.height - 8)) + 'px'
+    openMenuAt(e, blockMenuItems(block, k))
   })
   document.addEventListener('pointerdown', (e) => {
     if (!blockMenu.hidden && !blockMenu.contains(e.target)) closeBlockMenu()
@@ -4343,6 +4358,11 @@ const SaveLogic = (() => {
     li.append(open, play)
     li.dataset.path = deck.path
     li.dataset.name = name.textContent
+    li.addEventListener('contextmenu', (e) => {
+      if (!hasStyles) return
+      e.preventDefault()
+      openMenuAt(e, [menuItem('i-pencil', '學這份的風格', () => learnStyle(deck.path, name.textContent, when))])
+    })
     return li
   }
 
@@ -4389,6 +4409,8 @@ const SaveLogic = (() => {
       hasAssets = json.hasAssets === true
       canCutOut = json.canCutOut === true
       canBrowse = json.canBrowse === true
+      hasStyles = json.hasStyles === true
+      hasMemes = json.hasMemes === true
       deckList.replaceChildren(...json.decks.map(deckRow))
       deckEmpty.hidden = json.decks.length > 0
       landDecks.hidden = false
@@ -4416,8 +4438,79 @@ const SaveLogic = (() => {
   // 「AI 插入」按下去那一刻所在的頁；新頁接在它後面
   let genInsertAfter = 0
 
+  // --- 風格：AI 照一份寫好的規格做簡報（只有 server 有風格，/__decks 的 hasStyles，才有）---
+  // 風格是一個文字檔（DukPPT 放在「文件 › DukPPT › 風格」），AI 從喜歡的簡報歸納一次，之後照著做。
+  // 生成時選一份：AI 只寫每頁講什麼、是哪種頁，排版、配色、切頁、配梗由程式照規格套。
+  let hasStyles = false
+  let hasMemes = false
+  const STYLE_KEY = 'simppt-style'
+  const genStyles = document.getElementById('gen-styles')
+  const chosenStyle = () => (hasStyles && genMode === 'create' ? localStorage.getItem(STYLE_KEY) || '' : '')
+  const styleChip = (label, value, current) => {
+    const chip = document.createElement('button')
+    chip.type = 'button'
+    chip.textContent = label
+    chip.classList.toggle('on', value === current)
+    chip.addEventListener('click', () => {
+      if (value) localStorage.setItem(STYLE_KEY, value)
+      else localStorage.removeItem(STYLE_KEY)
+      drawStyles()
+    })
+    if (value) {
+      chip.title = '右鍵：打開這份規格來改'
+      chip.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        fetch('/__styles/open', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders() }, body: JSON.stringify({ name: value }) })
+      })
+    }
+    return chip
+  }
+  const drawStyles = async () => {
+    genStyles.hidden = !(hasStyles && genMode === 'create')
+    if (genStyles.hidden) return
+    let names = []
+    try {
+      const json = await (await fetch('/__styles', { headers: apiHeaders(), cache: 'no-store' })).json()
+      names = json.ok ? json.styles : []
+    } catch (err) { /* no styles then */ }
+    const current = names.includes(chosenStyle()) ? chosenStyle() : ''
+    genStyles.replaceChildren('風格', styleChip('不套', '', current), ...names.map((n) => styleChip(n, n, current)))
+  }
+  // 首頁對一份簡報按右鍵 ▸ 學這份的風格：AI 讀它，寫出一份規格存起來
+  // 學的時候那一列的時間欄寫著進度（首頁沒有狀態列）
+  const learnStyle = async (deckPath, title, where) => {
+    const was = where.textContent
+    const began = Date.now()
+    const ticker = setInterval(() => { where.textContent = `正在學風格… ${Math.floor((Date.now() - began) / 1000)} 秒` }, 1000)
+    where.textContent = '正在學風格…'
+    try {
+      const text = await (await fetch(`${encodePath(deckPath)}?t=${Date.now()}`, { cache: 'no-store' })).text()
+      const res = await fetch('/__styles/learn', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders() }, body: JSON.stringify({ name: title, decks: [text] }) })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.message)
+      localStorage.setItem(STYLE_KEY, json.name)
+      showToast(`學好了：「${json.name}」。AI 生成時就會照它做`)
+    } catch (err) {
+      showToast(err.message || '這份學不起來')
+    } finally {
+      clearInterval(ticker)
+      where.textContent = was
+    }
+  }
+  // 素材庫的圖收進梗圖：DukPPT 會讓 AI 看一眼，分到對的類別
+  const keepMeme = async (name) => {
+    try {
+      const res = await fetch('/__memes', { method: 'POST', headers: { 'Content-Type': 'application/json', ...apiHeaders() }, body: JSON.stringify({ asset: name }) })
+      const json = await res.json()
+      showToast(json.ok ? '收進梗圖了，AI 分好類就能用' : json.message)
+    } catch (err) {
+      showToast('收不進梗圖')
+    }
+  }
+
   const openGenModal = (mode) => {
     genMode = mode
+    drawStyles()
     genInsertAfter = previewIdx
     genTitle.textContent = mode === 'insert'
       ? `${GEN_MODES.insert.title}（接在第 ${genInsertAfter + 1} 頁後面）`
@@ -4468,7 +4561,7 @@ const SaveLogic = (() => {
   const GEN_REQUESTS = {
     create: (content) => ({
       url: '/__generate',
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', ...(chosenStyle() ? { 'X-Simppt-Style': encodeURIComponent(chosenStyle()) } : {}) },
       body: content,
     }),
     revise: (content) => ({
@@ -4493,7 +4586,7 @@ const SaveLogic = (() => {
   let aiLive = null
 
   // AI 偶爾會把整份包在 ``` 裡；還沒寫完時先把那兩行藏起來，畫面才不會是一塊程式碼
-  const partialDeck = (written) => written.replace(/^\s*```[^\n]*\n/, '').replace(/\n```\s*$/, '')
+  const partialDeck = (written) => written.replace(/^\s*```[^\n]*\n/, '').replace(/\n```\s*$/, '').replace(/^梗\s*[:：].*$/gm, '')
 
   // 讀 server 一行一行送來的進度；onText 拿到的是「目前為止寫了什麼」。回傳最後那一行（done）。
   const readAiStream = async (res, onText) => {

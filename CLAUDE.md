@@ -66,6 +66,12 @@
 - 只在 `/__decks` 回 `canCutOut: true` 時才有（DukPPT 有）：`cutOut(blob)` 第一次用才 `import('/__cutout/cutout.js')`，先試顯示卡（`device: 'gpu', model: 'isnet'`），丟錯才退回一般算法。別換成 `isnet_fp16` 配 gpu——不會丟錯但整張變透明（2026-11-26 試過）
 - 三個入口：選到圖片時 `#tool-cutout`、素材庫的圖按右鍵、按著 Alt 拖圖進來。結果一律是新檔，原圖不動
 
+## 風格與梗圖（AI 照規格做）
+
+- 只在 `/__decks` 回 `hasStyles` / `hasMemes` 時才有（DukPPT 有）。規格格式和規則在 `lib/style-spec.mjs`（解析、給 AI 的提示、從範本歸納的提示）和 `lib/style-apply.mjs`（照規則套：配色、各頁型的版型、超過字數切頁、配梗）。**AI 只負責寫每頁的內容和標頁型（`--- kind=頁型`），其他都是程式照規格做**，別把判斷搬回提示裡
+- 頁面：AI 生成對話框裡的風格小鈕（`#gen-styles`，選的存在 `simppt-style`，右鍵＝打開檔案改）；選了就在 `/__generate` 帶 `X-Simppt-Style`。首頁簡報按右鍵 ▸ 學這份的風格（`/__styles/learn`）。素材庫的圖按右鍵 ▸ 收進梗圖（`/__memes`）
+- 梗圖頁＝`layout=split`（圖左、字右），梗那句放最後加粗；寫的時候 `梗:` 那行先藏起來（`partialDeck`）
+
 ## 誰可以打 server（別改鬆）
 
 - 檔案路徑一律用 `lib/deck-store.mjs` 的 `insideRoot` 判斷，它看的是檔案在硬碟上真正的位置。只檢查網址或字串裡有沒有「.」開頭是不夠的：Windows 上 `.git` 也叫 `GIT~1`，2026-11-14 之前 `/GIT~1/config` 拿得到 git 設定
