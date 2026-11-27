@@ -970,7 +970,7 @@
         <span id="ed-pageinfo"></span>
         <button id="ed-page-more" class="btn btn-ghost btn-icon" title="這一頁的操作（也可以在縮圖上按右鍵）" aria-label="這一頁的操作"><svg class="ic"><use href="#i-more"/></svg></button>
       </div>
-      <span id="ed-rc-hint">在投影片上按右鍵：加文字、加圖片、AI 插入</span>
+      <span id="ed-rc-hint">在投影片上按右鍵：加文字、加圖片、加新頁</span>
       <button id="ed-keys" class="btn btn-ghost" title="看所有快捷鍵">快捷鍵<kbd>Ctrl</kbd><kbd>/</kbd></button>
     </div>
   </div>
@@ -3552,7 +3552,10 @@ const SaveLogic = (() => {
       return [
         menuItem('i-type', '加文字', addTextHere),
         menuItem('i-image', '加圖片', addImageHere),
-        ...(canMakeCards ? [menuItem('i-layout', '製作圖卡', openCardMaker)] : []),
+        menuItem('i-plus', '加一頁新的', () => {
+          const before = { text: edText.value, index: previewIdx }
+          commitPageOp(before, SimpptParser.insertSlideAfter(before.text, previewIdx, '', NEW_PAGE_BODY), '已新增一頁')
+        }),
         menuItem('i-message', 'AI 插入幾頁', () => openGenModal('insert')),
       ]
     }
