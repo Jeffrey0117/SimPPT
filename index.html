@@ -560,6 +560,12 @@
   #ed-preview:focus #ed-viewport { box-shadow: 0 0 0 2px var(--color-neutral); }
   #ed-page-more { width: 28px; height: 28px; }
   /* 這一頁的操作（右鍵選單） */
+  /* 大投影片的右鍵選單，長得跟縮圖的那個一樣 */
+  #block-menu { position: fixed; z-index: 25; min-width: 172px; display: flex; flex-direction: column; padding: var(--space-1); background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-m); }
+  #block-menu button { display: flex; align-items: center; gap: var(--space-2); height: 32px; padding: 0 var(--space-2); font: inherit; font-size: var(--text-sm); text-align: left; color: var(--color-ink); background: none; border: 0; border-radius: var(--radius-s); cursor: pointer; }
+  #block-menu button .ic { color: var(--color-neutral); }
+  #block-menu button:hover { background: var(--color-paper-4); }
+  #ed-rc-hint { font-size: var(--text-xs); color: var(--color-neutral); }
   #page-menu {
     position: fixed; z-index: 25; min-width: 188px;
     display: flex; flex-direction: column; padding: var(--space-1);
@@ -963,10 +969,8 @@
       <div id="ed-pagebar">
         <span id="ed-pageinfo"></span>
         <button id="ed-page-more" class="btn btn-ghost btn-icon" title="這一頁的操作（也可以在縮圖上按右鍵）" aria-label="這一頁的操作"><svg class="ic"><use href="#i-more"/></svg></button>
-        <button id="ed-add-text" class="btn btn-ghost" title="在這一頁加一段文字"><svg class="ic"><use href="#i-type"/></svg><span class="lbl">加文字</span></button>
-        <button id="ed-add-image" class="btn btn-ghost" title="在這一頁加一張圖片（從電腦選）"><svg class="ic"><use href="#i-image"/></svg><span class="lbl">加圖片</span></button>
-        <button id="ed-ai-insert" class="btn btn-ghost" title="說一句話，讓 AI 在這一頁後面加幾頁（本機 claude）"><svg class="ic"><use href="#i-message"/></svg><span class="lbl">AI 插入</span></button>
       </div>
+      <span id="ed-rc-hint">在投影片上按右鍵：加文字、加圖片、AI 插入</span>
       <button id="ed-keys" class="btn btn-ghost" title="看所有快捷鍵">快捷鍵<kbd>Ctrl</kbd><kbd>/</kbd></button>
     </div>
   </div>
@@ -3357,12 +3361,24 @@ const SaveLogic = (() => {
     return out.k
   }
 
+  // 在投影片上按右鍵的那個位置（佔投影片寬高的百分比）；下一個加進來的東西就放那裡，用過就清掉
+  let placeAt = null
+  const placed = (line, isImage) => {
+    if (!placeAt) return line
+    const at = placeAt
+    placeAt = null
+    const w = 30
+    const x = Math.max(0, Math.min(isImage ? 100 - w : 90, isImage ? at.x - w / 2 : at.x)).toFixed(1)
+    const y = Math.max(0, Math.min(90, at.y)).toFixed(1)
+    return isImage ? `${line}{x=${x} y=${y} w=${w}}` : `${line} {x=${x} y=${y}}`
+  }
+
   // 加一段字，馬上進入改字狀態（字是全選的，直接打就蓋掉）
-  document.getElementById('ed-add-text').addEventListener('click', () => {
-    const k = addBlockToPage(NEW_TEXT)
+  const addTextHere = () => {
+    const k = addBlockToPage(placed(NEW_TEXT, false))
     const el = previewBlocks[k]
     if (el) openBlockEditor(el, k)
-  })
+  }
 
   const imagePicker = document.createElement('input')
   imagePicker.type = 'file'
@@ -3377,7 +3393,7 @@ const SaveLogic = (() => {
       const json = await uploadImage(file)
       const url = json && json.data && json.data.url_direct
       if (!url) throw new Error((json && json.message) || 'no url')
-      addBlockToPage(`![](${url})`)
+      addBlockToPage(placed(`![](${url})`, true))
       setStatus('圖片已上傳', true)
     } catch (err) {
       showToast('圖片上傳失敗，再試一次或檢查網路')
@@ -3400,7 +3416,6 @@ const SaveLogic = (() => {
   let assetPanel = null
   const assetGrid = document.createElement('div')
   assetGrid.id = 'asset-grid'
-  const addImageBtn = document.getElementById('ed-add-image')
 
   const useAsset = async (item) => {
     try {
@@ -3471,6 +3486,7 @@ const SaveLogic = (() => {
     }
   }
   const closeAssets = () => {
+    placeAt = null
     if (assetPanel) assetPanel.hidden = true
   }
   const openAssets = () => {
@@ -3487,14 +3503,90 @@ const SaveLogic = (() => {
     assetPanel.hidden = false
     drawAssets()
   }
-  addImageBtn.addEventListener('click', () => {
+  // 「加圖片」：有素材庫就打開它，沒有就直接選檔
+  const addImageHere = () => {
     if (!hasAssets) imagePicker.click()
-    else if (assetPanel && !assetPanel.hidden) closeAssets()
     else openAssets()
+  }
+  document.addEventListener('pointerdown', (e) => {
+    if (!assetPanel || assetPanel.hidden || assetPanel.contains(e.target) || blockMenu.contains(e.target)) return
+    closeAssets()
+  })
+
+  // --- 在大投影片上按右鍵 ---
+  // 想對什麼做事，就對它按右鍵：空白處＝加東西（放在按的那個位置），圖片＝去背／收進素材庫，文字＝改字。
+  const blockMenu = document.createElement('div')
+  blockMenu.id = 'block-menu'
+  blockMenu.setAttribute('role', 'menu')
+  blockMenu.hidden = true
+  document.body.append(blockMenu)
+  const closeBlockMenu = () => {
+    blockMenu.hidden = true
+  }
+  const menuItem = (name, label, run) => {
+    const item = document.createElement('button')
+    item.type = 'button'
+    item.setAttribute('role', 'menuitem')
+    item.append(icon(name), label)
+    item.addEventListener('click', () => {
+      closeBlockMenu()
+      run()
+    })
+    return item
+  }
+  // 把頁面上的一張圖收進素材庫
+  const keepBlockImage = async (k) => {
+    const found = currentBlock(k)
+    if (!found) return
+    try {
+      const src = found.block.src
+      const blob = await (await fetch(resolveSrc(src))).blob()
+      await keepAsset(new File([blob], src.split('/').pop().split(/[?#]/)[0] || 'picture', { type: blob.type }))
+      showToast('收進素材庫了')
+    } catch (err) {
+      showToast(err.message || '收不進素材庫')
+    }
+  }
+  const blockMenuItems = (el, k) => {
+    if (!el) {
+      return [
+        menuItem('i-type', '加文字', addTextHere),
+        menuItem('i-image', '加圖片', addImageHere),
+        ...(canMakeCards ? [menuItem('i-layout', '製作圖卡', openCardMaker)] : []),
+        menuItem('i-message', 'AI 插入幾頁', () => openGenModal('insert')),
+      ]
+    }
+    const reset = menuItem('i-rotate', '還原位置和樣式', () => writeBlockAttrs(k, null))
+    if (el.tagName !== 'FIGURE') return [menuItem('i-pencil', '改字', () => openBlockEditor(el, k)), reset]
+    const picture = selectedImages().includes(k)
+    return [
+      ...(picture && canCutOut ? [menuItem('i-eraser', '去背', cutOutSelected)] : []),
+      ...(picture && hasAssets ? [menuItem('i-folder', '收進素材庫', () => keepBlockImage(k))] : []),
+      reset,
+    ]
+  }
+  edFrame.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    if (blockEdit) return
+    const el = e.target.closest(BLOCK_SELECTOR)
+    const k = el ? previewBlocks.indexOf(el) : -1
+    const block = k >= 0 ? el : null
+    const box = edFrame.getBoundingClientRect()
+    placeAt = block ? null : { x: ((e.clientX - box.left) / box.width) * 100, y: ((e.clientY - box.top) / box.height) * 100 }
+    if (block) selectBlock(block, k, false)
+    else deselectBlock()
+    blockMenu.replaceChildren(...blockMenuItems(block, k))
+    blockMenu.hidden = false
+    // 先顯示才量得到大小，再把它收進視窗裡
+    const size = blockMenu.getBoundingClientRect()
+    blockMenu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - size.width - 8)) + 'px'
+    blockMenu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - size.height - 8)) + 'px'
   })
   document.addEventListener('pointerdown', (e) => {
-    if (!assetPanel || assetPanel.hidden || assetPanel.contains(e.target) || addImageBtn.contains(e.target)) return
-    closeAssets()
+    if (!blockMenu.hidden && !blockMenu.contains(e.target)) closeBlockMenu()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !blockMenu.hidden) closeBlockMenu()
   })
   document.addEventListener('keydown', (e) => {
     if (!assetPanel || assetPanel.hidden) return
@@ -4294,7 +4386,6 @@ const SaveLogic = (() => {
       hasAssets = json.hasAssets === true
       canCutOut = json.canCutOut === true
       canBrowse = json.canBrowse === true
-      if (hasAssets) addImageBtn.title = '加圖片：打開素材庫（常用的圖），或從電腦選'
       deckList.replaceChildren(...json.decks.map(deckRow))
       deckEmpty.hidden = json.decks.length > 0
       landDecks.hidden = false
@@ -4319,7 +4410,6 @@ const SaveLogic = (() => {
     revise: { title: 'AI 編輯簡報', placeholder: '跟 AI 說要怎麼調整這份簡報…', submit: '送出', busy: 'AI 調整中…', empty: '請先輸入修改指令' },
     insert: { title: 'AI 插入幾頁', placeholder: '一句話就好，例如：講番茄鐘工作法，3 張以內', submit: '插入', busy: 'AI 寫稿中…', empty: '請先說要加什麼' },
   }
-  const edAiInsertBtn = document.getElementById('ed-ai-insert')
   // 「AI 插入」按下去那一刻所在的頁；新頁接在它後面
   let genInsertAfter = 0
 
@@ -4339,7 +4429,6 @@ const SaveLogic = (() => {
 
   aiGenerateBtn.addEventListener('click', () => openGenModal('create'))
   edAiReviseBtn.addEventListener('click', () => openGenModal('revise'))
-  edAiInsertBtn.addEventListener('click', () => openGenModal('insert'))
 
   // 等 AI 的時候：按鈕上數秒、下面一行說現在在幹嘛，取消是真的取消
   let genAbort = null
